@@ -112,6 +112,7 @@ const lowlight = createLowlight()
 
 const editor = useEditor({
   content: props.modelValue,
+  enableInputRules: false,
   onCreate: ({ editor }) => {
     // 編輯器已完全掛載，可以安全存取 view.dom
     if (editor.view && editor.view.dom) {
@@ -119,11 +120,22 @@ const editor = useEditor({
     }
   },
   extensions: [
-    StarterKit.configure({
+    StarterKit.extend({
+      addKeyboardShortcuts() {
+        return {}
+      },
+    }).configure({
       link: false,
       codeBlock: false,
       underline: false,
       blockquote: false,
+      orderedList: {
+        HTMLAttributes: {
+          class: 'list-decimal ml-6'
+        },
+        keepMarks: true,
+        keepAttributes: false,
+      },
       paragraph: {
         HTMLAttributes: {
           style: 'white-space: pre-wrap;'
@@ -195,7 +207,27 @@ const editor = useEditor({
       width: 640,
       height: 480,
     }),
-    Table.configure({
+    Table.extend({
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          'data-align': {
+            default: 'left',
+            parseHTML: element => element.getAttribute('data-align') || 'left',
+            renderHTML: attributes => {
+              return { 'data-align': attributes['data-align'] }
+            },
+          },
+          'data-border': {
+            default: '1',
+            parseHTML: element => element.getAttribute('data-border') || '1',
+            renderHTML: attributes => {
+              return { 'data-border': attributes['data-border'] }
+            },
+          },
+        }
+      },
+    }).configure({
       resizable: true,
       HTMLAttributes: {
         class: 'border-collapse border border-gray-300',
@@ -333,7 +365,13 @@ const editor = useEditor({
 
 const addInputField = () => {
   if (!editor.value) return
-  editor.value.chain().focus().insertContent({ type: 'inputField' }).run()
+  const isInTable = editor.value.isActive('tableCell') || editor.value.isActive('tableHeader')
+  if (isInTable) {
+    // 表格內插入簡單的占位符，在預覽時才轉換為 input
+    editor.value.chain().focus().insertContent('______').run()
+  } else {
+    editor.value.chain().focus().insertContent({ type: 'inputField' }).run()
+  }
 }
 
 const addDrawing = () => {
@@ -508,7 +546,7 @@ const addVideo = () => {
 }
 
 const insertTable = () => {
-  editor.value.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+  editor.value.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run()
   showTableModal.value = false
 }
 
@@ -538,6 +576,50 @@ const splitCell = () => {
 
 const deleteTable = () => {
   editor.value.chain().focus().deleteTable().run()
+}
+
+const setTableAlign = (align) => {
+  if (!editor.value) return
+  const { state } = editor.value
+  const { selection } = state
+  let tablePos = null
+  
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === 'table' && pos <= selection.from && pos + node.nodeSize >= selection.to) {
+      tablePos = pos
+      return false
+    }
+  })
+  
+  if (tablePos !== null) {
+    const tr = state.tr.setNodeMarkup(tablePos, null, {
+      ...state.doc.nodeAt(tablePos).attrs,
+      'data-align': align
+    })
+    editor.value.view.dispatch(tr)
+  }
+}
+
+const setTableBorder = (width) => {
+  if (!editor.value) return
+  const { state } = editor.value
+  const { selection } = state
+  let tablePos = null
+  
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === 'table' && pos <= selection.from && pos + node.nodeSize >= selection.to) {
+      tablePos = pos
+      return false
+    }
+  })
+  
+  if (tablePos !== null) {
+    const tr = state.tr.setNodeMarkup(tablePos, null, {
+      ...state.doc.nodeAt(tablePos).attrs,
+      'data-border': width
+    })
+    editor.value.view.dispatch(tr)
+  }
 }
 
 const setTextColor = (color) => {
@@ -1244,6 +1326,26 @@ onUnmounted(() => {
         <button @click="splitCell" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="分割儲存格">
           分割
         </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <button @click="setTableAlign('left')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠左">
+          靠左
+        </button>
+        <button @click="setTableAlign('center')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格置中">
+          置中
+        </button>
+        <button @click="setTableAlign('right')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠右">
+          靠右
+        </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <span class="text-xs text-gray-600">框線</span>
+        <select @change="setTableBorder($event.target.value)" class="text-xs border rounded px-1 py-1">
+          <option value="1">1px</option>
+          <option value="2">2px</option>
+          <option value="3">3px</option>
+          <option value="4">4px</option>
+          <option value="5">5px</option>
+        </select>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
         <button @click="deleteTable" class="text-xs px-2 py-1 border rounded hover:bg-red-100 text-red-600" title="刪除表格">
           刪除表格
         </button>
@@ -1274,7 +1376,7 @@ onUnmounted(() => {
     <div v-if="showTableModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="bg-white rounded-lg shadow-xl p-6 w-96">
         <h3 class="text-lg font-bold mb-4">插入表格</h3>
-        <p class="text-sm text-gray-600 mb-4">將插入一個 3×3 的表格（含標題列）</p>
+        <p class="text-sm text-gray-600 mb-4">將插入一個 3×3 的表格</p>
         <div class="flex justify-end gap-2">
           <button @click="showTableModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">
             取消
@@ -1434,6 +1536,7 @@ onUnmounted(() => {
   width: 100%;
   min-height: calc(100vh - 350px);
   position: relative;
+  overflow-x: hidden;
 }
 
 @media (max-width: 1024px) {
@@ -1556,6 +1659,109 @@ ruby rt {
   cursor: pointer;
   width: 1rem;
   height: 1rem;
+}
+
+/* Table Column Resize Handle */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #3b82f6;
+  pointer-events: none;
+}
+
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Table Alignment */
+.ProseMirror table {
+  max-width: 100% !important;
+  width: auto !important;
+  table-layout: auto;
+}
+
+.ProseMirror table colgroup col {
+  max-width: 100%;
+}
+
+.ProseMirror table[data-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ProseMirror table[data-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.ProseMirror table[data-align="left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Table Border Width */
+.ProseMirror table {
+  border: 1px solid #d1d5db;
+  border-style: solid;
+}
+
+.ProseMirror table td,
+.ProseMirror table th {
+  border: 1px solid #d1d5db;
+  border-style: solid;
+}
+
+.ProseMirror table[data-border="1"],
+.ProseMirror table[data-border="1"] td,
+.ProseMirror table[data-border="1"] th { 
+  border-width: 1px;
+  border-style: solid;
+  border-color: #d1d5db;
+}
+
+.ProseMirror table[data-border="2"],
+.ProseMirror table[data-border="2"] td,
+.ProseMirror table[data-border="2"] th { 
+  border-width: 2px;
+  border-style: solid;
+  border-color: #d1d5db;
+}
+
+.ProseMirror table[data-border="3"],
+.ProseMirror table[data-border="3"] td,
+.ProseMirror table[data-border="3"] th { 
+  border-width: 3px;
+  border-style: solid;
+  border-color: #d1d5db;
+}
+
+.ProseMirror table[data-border="4"],
+.ProseMirror table[data-border="4"] td,
+.ProseMirror table[data-border="4"] th { 
+  border-width: 4px;
+  border-style: solid;
+  border-color: #d1d5db;
+}
+
+.ProseMirror table[data-border="5"],
+.ProseMirror table[data-border="5"] td,
+.ProseMirror table[data-border="5"] th { 
+  border-width: 5px;
+  border-style: solid;
+  border-color: #d1d5db;
+}
+
+/* Table input styling */
+.ProseMirror table input[type="text"] {
+  width: 30px;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  display: inline-block;
 }
 </style>
 
