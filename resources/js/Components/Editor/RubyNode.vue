@@ -50,46 +50,44 @@ const parsedZhuyin = computed(() => {
 
 <style>
 .inline-ruby {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  margin: 0 2px;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  vertical-align: baseline !important;
+  margin: 0 0.15em !important;
+  line-height: 1.8 !important;
 }
 
 .zhuyin-rt {
-  display: inline-block;
-  line-height: 1;
-  font-family: "Bopomofo", system-ui, sans-serif;
-  text-align: center;
-  vertical-align: middle;
-  font-size: 1em; /* Base size for zoom scaling */
+  display: inline-block !important;
+  line-height: 1 !important;
+  font-family: "Bopomofo", system-ui, sans-serif !important;
+  margin-left: 0.15em !important;
+  font-size: 1em !important;
 }
 
 .zhuyin-container {
-  display: inline-flex;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  flex-direction: column;
-  align-items: flex-start;
-  column-gap: 0;
-  position: relative; /* For absolute positioning of neutral tone */
+  display: inline-flex !important;
+  writing-mode: vertical-rl !important;
+  text-orientation: upright !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  white-space: nowrap !important;
 }
 
 .symbols-group {
-  display: inline-flex;
-  flex-direction: row; /* Horizontal in vertical-rl becomes vertical */
-  align-items: center;
-  justify-content: flex-start;
-  position: relative;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  writing-mode: vertical-rl !important;
+  text-orientation: upright !important;
 }
 
 .neutral-tone {
   font-size: 1em;
   line-height: 1;
-  order: -1; /* Place before symbols */
-  margin-bottom: 0.2em; /* Space between tone and symbols */
+  order: -1;
+  margin-bottom: 0.2em;
 }
 
 .symbol-char {

@@ -1,7 +1,10 @@
-import { Mark, mergeAttributes } from '@tiptap/core'
+import { Node, mergeAttributes } from '@tiptap/core'
 
-export const TextBox = Mark.create({
+export const TextBox = Node.create({
     name: 'textBox',
+    group: 'inline',
+    inline: true,
+    content: 'inline*',
 
     addOptions() {
         return {
@@ -13,27 +16,11 @@ export const TextBox = Mark.create({
         return {
             borderColor: {
                 default: '#000000',
-                parseHTML: element => element.style.borderColor || '#000000',
-                renderHTML: attributes => {
-                    if (!attributes.borderColor) {
-                        return {}
-                    }
-                    return {
-                        style: `border: 2px solid ${attributes.borderColor}; padding: 2px 4px; border-radius: 3px; display: inline-block;`,
-                    }
-                },
+                parseHTML: element => element.getAttribute('data-border-color') || '#000000',
             },
             fillColor: {
-                default: null,
-                parseHTML: element => element.style.backgroundColor || null,
-                renderHTML: attributes => {
-                    if (!attributes.fillColor) {
-                        return {}
-                    }
-                    return {
-                        style: `background-color: ${attributes.fillColor};`,
-                    }
-                },
+                default: '#ffffff',
+                parseHTML: element => element.getAttribute('data-fill-color') || '#ffffff',
             },
         }
     },
@@ -42,23 +29,23 @@ export const TextBox = Mark.create({
         return [
             {
                 tag: 'span[data-text-box]',
+                priority: 60,
             },
         ]
     },
 
     renderHTML({ HTMLAttributes }) {
-        const borderStyle = HTMLAttributes.borderColor
-            ? `border: 2px solid ${HTMLAttributes.borderColor}; padding: 2px 4px; border-radius: 3px; display: inline-block;`
-            : ''
-        const fillStyle = HTMLAttributes.fillColor
-            ? `background-color: ${HTMLAttributes.fillColor};`
-            : ''
+        const borderColor = HTMLAttributes.borderColor || '#000000'
+        const fillColor = HTMLAttributes.fillColor || '#ffffff'
+        const style = `border: 2px solid ${borderColor}; background-color: ${fillColor}; padding: 2px 4px; border-radius: 3px; display: inline-block;`
 
         return [
             'span',
-            mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+            mergeAttributes(this.options.HTMLAttributes, {
                 'data-text-box': '',
-                style: `${borderStyle} ${fillStyle}`.trim(),
+                'data-border-color': borderColor,
+                'data-fill-color': fillColor,
+                style: style,
             }),
             0,
         ]
@@ -66,11 +53,34 @@ export const TextBox = Mark.create({
 
     addCommands() {
         return {
-            setTextBox: (attributes) => ({ commands }) => {
-                return commands.setMark(this.name, attributes)
+            setTextBox: (attributes) => ({ state, dispatch, chain }) => {
+                const { from, to } = state.selection
+                
+                if (from === to) return false
+                
+                const selectedContent = state.doc.slice(from, to).content
+                const textBoxNode = state.schema.nodes.textBox.create(attributes, selectedContent)
+                
+                if (dispatch) {
+                    const tr = state.tr.replaceRangeWith(from, to, textBoxNode)
+                    dispatch(tr)
+                }
+                return true
             },
-            unsetTextBox: () => ({ commands }) => {
-                return commands.unsetMark(this.name)
+            unsetTextBox: () => ({ state, dispatch }) => {
+                const { from } = state.selection
+                const $pos = state.doc.resolve(from)
+                const node = $pos.parent
+                
+                if (node.type.name === 'textBox') {
+                    const nodePos = from - $pos.parentOffset
+                    if (dispatch) {
+                        const tr = state.tr.replaceWith(nodePos, nodePos + node.nodeSize, node.content)
+                        dispatch(tr)
+                    }
+                    return true
+                }
+                return false
             },
         }
     },
