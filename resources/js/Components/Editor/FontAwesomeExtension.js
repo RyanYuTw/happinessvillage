@@ -8,12 +8,10 @@ export default Node.create({
   group: 'inline',
 
   inline: true,
-
+  
   atom: true,
   
   selectable: true,
-  
-  draggable: false,
 
   addAttributes() {
     return {
@@ -32,17 +30,25 @@ export default Node.create({
   parseHTML() {
     return [
       {
-        tag: 'i[data-fa-icon]',
+        tag: 'span[data-fa-icon]',
+        getAttrs: element => {
+          return {
+            icon: element.getAttribute('data-icon') || 'fa-solid fa-star',
+            color: element.getAttribute('data-color') || '#000000',
+            size: element.getAttribute('data-size') || '1em',
+          }
+        },
       },
     ]
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['i', mergeAttributes({
-      'data-fa-icon': 'true',
-      class: HTMLAttributes.icon,
-      style: `color: ${HTMLAttributes.color}; font-size: ${HTMLAttributes.size};`
-    })]
+    return ['span', { 'data-fa-icon': 'true', 'data-icon': HTMLAttributes.icon, 'data-color': HTMLAttributes.color, 'data-size': HTMLAttributes.size, class: 'fa-icon-wrapper' }, 
+      ['i', {
+        class: HTMLAttributes.icon,
+        style: `color: ${HTMLAttributes.color}; font-size: ${HTMLAttributes.size};`
+      }]
+    ]
   },
 
   addNodeView() {

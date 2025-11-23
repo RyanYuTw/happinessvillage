@@ -124,6 +124,18 @@ class HandbookController extends Controller
     }
 
     /**
+     * 預覽手冊（純內容）
+     */
+    public function preview($id)
+    {
+        $handbook = Handbook::findOrFail($id);
+        return view('handbook-preview', [
+            'content' => $handbook->content,
+            'lesson' => $handbook->lesson
+        ]);
+    }
+
+    /**
      * 刪除手冊
      */
     public function destroy($id)

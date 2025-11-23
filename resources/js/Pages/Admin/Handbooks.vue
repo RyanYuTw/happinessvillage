@@ -1,6 +1,6 @@
 <template>
     <AdminLayout>
-        <div class="bg-white rounded-lg shadow">
+        <div class="bg-white rounded-lg shadow" style="min-height: calc(100vh - 200px);">
             <div class="px-4 sm:px-6 py-4 border-b border-gray-200">
                 <h2 class="text-base sm:text-lg font-medium text-gray-900">學習手冊管理</h2>
             </div>
@@ -33,18 +33,18 @@
                     </Link>
                 </div>
                 
-                <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 md:rounded-lg" style="min-height: 400px;">
                     <table class="min-w-full divide-y divide-gray-300">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">年度</th>
-                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">年級</th>
-                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">學期</th>
-                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">課別</th>
-                                <th class="hidden lg:table-cell px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">發布時間</th>
-                                <th class="hidden md:table-cell px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">建立時間</th>
-                                <th class="hidden xl:table-cell px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">更新時間</th>
-                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">操作</th>
+                                <th class="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">年度</th>
+                                <th class="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">年級</th>
+                                <th class="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">學期</th>
+                                <th class="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">課別</th>
+                                <th class="hidden lg:table-cell px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">發布時間</th>
+                                <th class="hidden md:table-cell px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">建立時間</th>
+                                <th class="hidden xl:table-cell px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase">更新時間</th>
+                                <th class="px-3 py-3 text-center text-sm font-medium text-gray-500 uppercase">操作</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
@@ -56,10 +56,10 @@
                                 <td class="hidden lg:table-cell px-3 py-4 text-sm text-gray-500">{{ formatDate(handbook.published_at) }}</td>
                                 <td class="hidden md:table-cell px-3 py-4 text-sm text-gray-500">{{ formatDate(handbook.created_at) }}</td>
                                 <td class="hidden xl:table-cell px-3 py-4 text-sm text-gray-500">{{ formatDate(handbook.updated_at) }}</td>
-                                <td class="px-3 py-4 text-center space-x-2">
-                                    <Link :href="route('admin.handbooks.show', handbook.id)" class="text-blue-600 hover:text-blue-800" title="查看"><i class="fas fa-eye"></i></Link>
-                                    <Link :href="route('admin.handbooks.edit', handbook.id)" class="text-yellow-600 hover:text-yellow-800" title="編輯"><i class="fas fa-edit"></i></Link>
-                                    <button @click="deleteHandbook(handbook.id)" class="text-red-600 hover:text-red-800" title="刪除"><i class="fas fa-trash"></i></button>
+                                <td class="px-3 py-4 text-center space-x-4">
+                                    <a :href="route('admin.handbooks.preview', handbook.id)" target="_blank" class="text-blue-600 hover:text-blue-800 text-lg" title="查看"><i class="fas fa-eye"></i></a>
+                                    <Link :href="route('admin.handbooks.edit', handbook.id)" class="text-yellow-600 hover:text-yellow-800 text-lg" title="編輯"><i class="fas fa-edit"></i></Link>
+                                    <button @click="deleteHandbook(handbook.id)" class="text-red-600 hover:text-red-800 text-lg" title="刪除"><i class="fas fa-trash"></i></button>
                                 </td>
                             </tr>
                         </tbody>
