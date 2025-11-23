@@ -1,10 +1,14 @@
 <script setup>
 import { NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 
 const props = defineProps({
   ...nodeViewProps,
   selected: Boolean
+})
+
+const isInTable = computed(() => {
+  return props.editor.isActive('tableCell') || props.editor.isActive('tableHeader')
 })
 
 const deleteNode = () => {
@@ -16,17 +20,26 @@ const isEditing = ref(false)
 const isSelected = ref(false)
 const startX = ref(0)
 const startY = ref(0)
-const offsetX = ref(props.node.attrs.x || 100)
-const offsetY = ref(props.node.attrs.y || 100)
+const offsetX = computed(() => isInTable.value ? 0 : (props.node.attrs.x || 100))
+const offsetY = computed(() => isInTable.value ? 0 : (props.node.attrs.y || 100))
 const inputRef = ref(null)
 
 const handleMouseDown = (e) => {
   if (isEditing.value) return
-  isSelected.value = true
-  isDragging.value = true
-  startX.value = e.clientX - offsetX.value
-  startY.value = e.clientY - offsetY.value
-  e.preventDefault()
+  
+  if (!isInTable.value) {
+    isSelected.value = true
+    isDragging.value = true
+    const prosemirror = document.querySelector('.ProseMirror')
+    const rect = prosemirror.getBoundingClientRect()
+    startX.value = e.clientX - rect.left - offsetX.value
+    startY.value = e.clientY - rect.top - offsetY.value
+    e.preventDefault()
+  } else {
+    if (e.target.tagName === 'INPUT') {
+      isSelected.value = true
+    }
+  }
 }
 
 const handleDoubleClick = () => {
@@ -40,6 +53,12 @@ const handleBlur = () => {
   isEditing.value = false
 }
 
+const handleClick = (e) => {
+  if (!isEditing.value && isInTable.value) {
+    isSelected.value = true
+  }
+}
+
 const handleClickOutside = (e) => {
   const wrapper = e.target.closest('.input-field-wrapper')
   if (!wrapper) {
@@ -47,11 +66,22 @@ const handleClickOutside = (e) => {
   }
 }
 
+const handleKeyDown = (e) => {
+  if (isInTable.value && isSelected.value && !isEditing.value) {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      deleteNode()
+      e.preventDefault()
+    }
+  }
+}
+
 const handleMouseMove = (e) => {
   if (!isDragging.value) return
-  offsetX.value = e.clientX - startX.value
-  offsetY.value = e.clientY - startY.value
-  props.updateAttributes({ x: offsetX.value, y: offsetY.value })
+  const prosemirror = document.querySelector('.ProseMirror')
+  const rect = prosemirror.getBoundingClientRect()
+  const newX = e.clientX - rect.left - startX.value
+  const newY = e.clientY - rect.top - startY.value
+  props.updateAttributes({ x: newX, y: newY })
 }
 
 const handleMouseUp = () => {
@@ -62,27 +92,34 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', handleMouseUp)
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 
 <template>
   <node-view-wrapper 
-    class="absolute group input-field-wrapper"
-    :class="{ 'ring-2 ring-blue-500': isSelected, 'cursor-move': !isEditing, 'cursor-text': isEditing }"
-    :style="{ left: offsetX + 'px', top: offsetY + 'px', zIndex: 1000 }"
-    @mousedown="handleMouseDown"
-    @dblclick="handleDoubleClick"
+    class="group input-field-wrapper"
+    :class="[
+      isInTable ? 'inline-block' : 'absolute',
+      { 'ring-2 ring-blue-500': isSelected, 'cursor-move': !isEditing && !isInTable, 'cursor-text': isEditing, 'cursor-pointer': isInTable && !isEditing }
+    ]"
+    :style="isInTable ? {} : { left: offsetX + 'px', top: offsetY + 'px', zIndex: 1000 }"
+    @mousedown.stop="handleMouseDown"
+    @click.stop="handleClick"
+    @dblclick.stop="handleDoubleClick"
   >
     <button
       v-if="isSelected && !isEditing"
       @click="deleteNode"
-      class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+      :class="isInTable ? 'relative ml-1' : 'absolute -top-2 -right-2'"
+      class="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
       style="z-index: 1001;"
     >
       ×

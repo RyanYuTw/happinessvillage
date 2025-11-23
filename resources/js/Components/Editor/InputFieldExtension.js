@@ -34,11 +34,18 @@ export default Node.create({
     return [
       {
         tag: 'span[data-input-field]',
-        getAttrs: element => ({
-          value: element.getAttribute('data-value') || '',
-          x: parseInt(element.getAttribute('data-x')) || 100,
-          y: parseInt(element.getAttribute('data-y')) || 100,
-        }),
+        priority: 100,
+        getAttrs: element => {
+          // 檢查是否在表格內
+          if (element.closest('table')) {
+            return false // 不解析表格內的輸入框
+          }
+          return {
+            value: element.getAttribute('data-value') || '',
+            x: parseInt(element.getAttribute('data-x')) || 100,
+            y: parseInt(element.getAttribute('data-y')) || 100,
+          }
+        },
       },
     ]
   },
@@ -49,7 +56,6 @@ export default Node.create({
       'data-value': HTMLAttributes.value,
       'data-x': HTMLAttributes.x,
       'data-y': HTMLAttributes.y,
-      style: `position: absolute; left: ${HTMLAttributes.x}px; top: ${HTMLAttributes.y}px; z-index: 1000;`
     }, ['input', {
       type: 'text',
       value: HTMLAttributes.value,

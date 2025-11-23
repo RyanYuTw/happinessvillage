@@ -71,17 +71,167 @@
             margin-left: 0;
             margin-right: auto;
         }
+        .content table[data-align="center"] {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .content table[data-align="right"] {
+            margin-left: auto;
+            margin-right: 0;
+        }
+        .content table[data-align="left"] {
+            margin-left: 0;
+            margin-right: auto;
+        }
+        .content table {
+            border-collapse: collapse;
+            border: 1px solid #d1d5db !important;
+            border-style: solid !important;
+        }
+        .content table td,
+        .content table th {
+            border: 1px solid #d1d5db !important;
+            border-style: solid !important;
+            padding: 0.5rem;
+        }
+        .content table[data-border="1"],
+        .content table[data-border="1"] td,
+        .content table[data-border="1"] th { 
+            border-width: 1px !important;
+            border-style: solid !important;
+            border-color: #d1d5db !important;
+        }
+        .content table[data-border="2"],
+        .content table[data-border="2"] td,
+        .content table[data-border="2"] th { 
+            border-width: 2px !important;
+            border-style: solid !important;
+            border-color: #d1d5db !important;
+        }
+        .content table[data-border="3"],
+        .content table[data-border="3"] td,
+        .content table[data-border="3"] th { 
+            border-width: 3px !important;
+            border-style: solid !important;
+            border-color: #d1d5db !important;
+        }
+        .content table[data-border="4"],
+        .content table[data-border="4"] td,
+        .content table[data-border="4"] th { 
+            border-width: 4px !important;
+            border-style: solid !important;
+            border-color: #d1d5db !important;
+        }
+        .content table[data-border="5"],
+        .content table[data-border="5"] td,
+        .content table[data-border="5"] th { 
+            border-width: 5px !important;
+            border-style: solid !important;
+            border-color: #d1d5db !important;
+        }
+        .content table td p,
+        .content table th p {
+            margin: 0;
+        }
+        .content table span[data-input-field] {
+            display: inline-block;
+        }
+        .content span[data-input-field]:not(table *) {
+            position: absolute;
+            z-index: 1000;
+        }
+        .content span[data-input-field] input {
+            width: 30px;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
         .content p {
             white-space: pre-wrap;
         }
+        ruby {
+            display: inline-flex !important;
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            vertical-align: baseline !important;
+            margin: 0 0.15em !important;
+            line-height: 1 !important;
+        }
+        ruby > span {
+            line-height: 1 !important;
+        }
+        ruby > rt,
+        ruby rt {
+            display: inline-block !important;
+            font-size: 0.35em !important;
+            writing-mode: vertical-rl !important;
+            text-orientation: upright !important;
+            margin-left: 0.15em !important;
+            line-height: 1 !important;
+            font-family: "Bopomofo", "Microsoft JhengHei", sans-serif !important;
+            color: inherit !important;
+            white-space: nowrap !important;
+            align-self: flex-start !important;
+        }
+        .content table {
+            max-width: 100% !important;
+            width: auto !important;
+        }
     </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('span[data-input-field]:not(table *)').forEach(function(el) {
+            const x = el.getAttribute('data-x');
+            const y = el.getAttribute('data-y');
+            if (x && y) {
+                el.style.left = x + 'px';
+                el.style.top = y + 'px';
+            }
+        });
+        
+        // 將表格中的占位符替換為 input 標籤
+        document.querySelectorAll('.content table').forEach(function(table) {
+            const html = table.innerHTML;
+            const replaced = html.replace(/______/g, '<input type="text" style="width: 30px; border: 1px solid #d1d5db; border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;" />');
+            if (html !== replaced) {
+                table.innerHTML = replaced;
+            }
+        });
+        
+        // 處理注音聲調位置
+        document.querySelectorAll('ruby rt').forEach(function(rt) {
+            const text = rt.textContent;
+            const toneMatch = text.match(/[ˊˇˋ˙]/);
+            if (toneMatch) {
+                const tone = toneMatch[0];
+                const baseText = text.replace(/[ˊˇˋ˙]/g, '');
+                const tonePos = text.indexOf(tone);
+                
+                if (tone === '˙') {
+                    // 輕聲在第一個注音符號上方
+                    rt.innerHTML = '<span style="position: relative;">' + 
+                        '<span style="position: absolute; top: -0.35em; left: 0.05em; font-size: 0.9em;">' + tone + '</span>' + 
+                        baseText + 
+                        '</span>';
+                } else {
+                    // 2,3,4聲在注音符號右側中間偏下
+                    rt.innerHTML = '<span style="position: relative; display: inline-block;">' + 
+                        baseText + 
+                        '<span style="position: absolute; right: -0.55em; top: 35%; font-size: 1em;">' + tone + '</span>' + 
+                        '</span>';
+                }
+            }
+        });
+    });
+    </script>
 </head>
 <body>
     <div class="bg-wrapper">
         <div class="bg-left"></div>
         <div class="bg-right"></div>
         <div class="content">
-            {!! html_entity_decode($content) !!}
+            {!! html_entity_decode(html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES | ENT_HTML5, 'UTF-8') !!}
         </div>
     </div>
 </body>
