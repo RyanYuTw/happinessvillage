@@ -12,6 +12,7 @@ const props = defineProps(nodeViewProps)
       @input="updateAttributes({ value: $event.target.value })"
       :placeholder="node.attrs.placeholder"
       class="border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+      style="width: 30px;"
     />
   </node-view-wrapper>
 </template>

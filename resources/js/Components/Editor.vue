@@ -8,10 +8,10 @@ import Blockquote from '@tiptap/extension-blockquote'
 import Placeholder from '@tiptap/extension-placeholder'
 import InputFieldExtension from './Editor/InputFieldExtension'
 import DrawingExtension from './Editor/DrawingExtension'
-import ImageAnnotationExtension from './Editor/ImageAnnotationExtension'
 import ChartExtension from './Editor/ChartExtension'
 import ZhuyinExtension from './Editor/ZhuyinExtension'
 import ZhuyinSelector from './Editor/ZhuyinSelector.vue'
+import FontAwesomeExtension from './Editor/FontAwesomeExtension'
 import Link from '@tiptap/extension-link'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Youtube from '@tiptap/extension-youtube'
@@ -42,7 +42,7 @@ import {
   Indent as IndentIcon, Outdent as OutdentIcon, Underline as UnderlineIcon,
   Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, FileCode, Zap,
-  Quote, ListTodo
+  Quote, ListTodo, Smile
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -62,7 +62,7 @@ const polyphoneOptions = ref([])
 const zhuyinProcessingData = ref([])
 const currentPolyphoneIndex = ref(-1)
 const polyphoneCandidates = ref([])
-const zhuyinSize = ref(0.3) // Default Zhuyin size
+const zhuyinSize = ref(0.35) // Default Zhuyin size
 const fontSize = ref('16px') // Default font size
 const showLinkModal = ref(false)
 const linkUrl = ref('')
@@ -74,6 +74,28 @@ const borderColor = ref('#000000')
 
 const boxFillColor = ref('#ffffff')
 const showHtmlModal = ref(false)
+const showIconModal = ref(false)
+const iconClass = ref('')
+const iconColor = ref('#000000')
+const iconSize = ref('1em')
+const showEmojiPicker = ref(false)
+const showImageUploadModal = ref(false)
+const imageTags = ref('')
+const imageFilename = ref('')
+const selectedImageFile = ref(null)
+
+const emojis = [
+  '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗',
+  '😚', '😙', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏',
+  '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '😎',
+  '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭',
+  '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '🖐', '🖖', '👋',
+  '🤝', '💪', '🙏', '✍️', '💅', '🤳', '💃', '🕺', '👯', '🧘', '🛀', '🛌', '👨‍👩‍👧‍👦', '👪', '👶', '👧', '🧒', '👦',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️',
+  '✝️', '☪️', '🕉', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏',
+  '⭐', '🌟', '💫', '✨', '☄️', '☀️', '🌤', '⛅', '🌥', '☁️', '🌦', '🌧', '⛈', '🌩', '🌨', '❄️', '☃️', '⛄',
+  '🔥', '💧', '🌊', '🎃', '🎄', '🎆', '🎇', '🧨', '✨', '🎈', '🎉', '🎊', '🎋', '🎍', '🎎', '🎏', '🎐', '🎑'
+]
 
 const htmlContent = ref('')
 const isRealTimeZhuyin = ref(false)
@@ -81,12 +103,20 @@ const isComposing = ref(false)
 let typingTimer = null
 let lastConvertedPosition = -1
 let isConverting = ref(false)
+let compositionTimer = null
+let mountTimer = null
 
 // Create lowlight instance for code highlighting
 const lowlight = createLowlight()
 
 const editor = useEditor({
   content: props.modelValue,
+  onCreate: ({ editor }) => {
+    // 編輯器已完全掛載，可以安全存取 view.dom
+    if (editor.view && editor.view.dom) {
+      editor.view.dom.addEventListener('mousedown', handleImageMouseDown)
+    }
+  },
   extensions: [
     StarterKit.configure({
       link: false,
@@ -116,9 +146,9 @@ const editor = useEditor({
     }),
     InputFieldExtension,
     DrawingExtension,
-    ImageAnnotationExtension,
     ChartExtension,
     ZhuyinExtension,
+    FontAwesomeExtension,
     TextStyle,
     FontSize,
     Image.extend({
@@ -200,8 +230,8 @@ const editor = useEditor({
         isComposing.value = false
         
         if (isRealTimeZhuyin.value) {
-          setTimeout(() => {
-            if (!editor.value) return
+          compositionTimer = setTimeout(() => {
+            if (!editor.value || !editor.value.view || !editor.value.view.dom) return
             
             const { from } = editor.value.state.selection
             let textStart = from
@@ -249,22 +279,22 @@ const editor = useEditor({
 })
 
 const addInputField = () => {
+  if (!editor.value) return
   editor.value.chain().focus().insertContent({ type: 'inputField' }).run()
 }
 
 const addDrawing = () => {
+  if (!editor.value) return
   editor.value.chain().focus().insertContent({ type: 'drawing' }).run()
 }
 
-const addImageAnnotation = () => {
-  editor.value.chain().focus().insertContent({ type: 'imageAnnotation' }).run()
-}
-
 const addChart = () => {
+  if (!editor.value) return
   editor.value.chain().focus().insertContent({ type: 'chart' }).run()
 }
 
 const addZhuyin = async () => {
+  if (!editor.value) return
   const { from, to } = editor.value.state.selection
   const text = editor.value.state.doc.textBetween(from, to)
   
@@ -345,11 +375,19 @@ const convertRealTime = async (from, to, text) => {
       }
     } else {
       // 沒有多音字，直接使用第一個選項
+      const cleanZhuyin = (zhuyin) => {
+        if (!zhuyin) return zhuyin
+        // 移除所有括號及其內容（全形和半形）
+        return zhuyin.replace(/[（(][^）)]*[）)]/g, '').trim()
+      }
+      
       const zhuyinData = data.map(item => ({
         char: item.char,
-        rt: item.zhuyin[0],
+        rt: cleanZhuyin(item.zhuyin[0]),
         size: zhuyinSize.value
       }))
+      
+      if (!editor.value || !editor.value.view) return
       
       const { state, view } = editor.value
       const { schema } = state
@@ -385,11 +423,13 @@ const convertRealTime = async (from, to, text) => {
   }
 }
 const setFontSize = (size) => {
+  if (!editor.value) return
   fontSize.value = size
   editor.value.chain().focus().setFontSize(size).run()
 }
 
 const toggleLink = () => {
+  if (!editor.value) return
   const previousUrl = editor.value.getAttributes('link').href
   if (previousUrl) {
     editor.value.chain().focus().unsetLink().run()
@@ -399,6 +439,7 @@ const toggleLink = () => {
 }
 
 const insertLink = () => {
+  if (!editor.value || !linkUrl.value) return
   if (linkUrl.value) {
     editor.value.chain().focus().setLink({ href: linkUrl.value }).run()
     linkUrl.value = ''
@@ -485,7 +526,16 @@ const handleZhuyinResolve = (selectedZhuyin) => {
 }
 
 const insertResolvedZhuyin = () => {
+  if (!editor.value || !editor.value.view) return
+  
   const firstItem = zhuyinProcessingData.value[0]
+  
+  // 清理注音標記的函數
+  const cleanZhuyin = (zhuyin) => {
+    if (!zhuyin) return zhuyin
+    // 移除所有括號及其內容（全形和半形）
+    return zhuyin.replace(/[（(][^）)]*[）)]/g, '').trim()
+  }
   
   // 如果有 from/to，表示是即時轉換，使用 replaceWith
   if (firstItem.from !== undefined && firstItem.to !== undefined) {
@@ -497,7 +547,7 @@ const insertResolvedZhuyin = () => {
     
     const nodes = []
     zhuyinProcessingData.value.forEach(item => {
-      const rt = item.selected || item.zhuyin[0]
+      const rt = cleanZhuyin(item.selected || item.zhuyin[0])
       if (rt && rt !== item.char) {
         nodes.push(createRuby(item.char, rt, zhuyinSize.value))
       } else {
@@ -511,7 +561,7 @@ const insertResolvedZhuyin = () => {
     // 一般轉換，使用 insertZhuyin
     const formatted = zhuyinProcessingData.value.map(item => ({
       char: item.char,
-      rt: item.selected || item.char,
+      rt: cleanZhuyin(item.selected || item.char),
       size: zhuyinSize.value
     }))
     
@@ -525,13 +575,100 @@ const insertResolvedZhuyin = () => {
 }
 
 const openHtmlModal = () => {
+  if (!editor.value) return
   htmlContent.value = editor.value.getHTML()
   showHtmlModal.value = true
 }
 
 const saveHtmlContent = () => {
+  if (!editor.value) return
   editor.value.commands.setContent(htmlContent.value)
   showHtmlModal.value = false
+}
+
+const insertIcon = () => {
+  if (!editor.value) {
+    alert('編輯器尚未就緒')
+    return
+  }
+  
+  if (!iconClass.value.trim()) {
+    alert('請輸入圖示類別')
+    return
+  }
+  
+  // 清理輸入，移除可能的 HTML 標籤
+  const cleanClass = iconClass.value.trim().replace(/<[^>]*>/g, '')
+  
+  try {
+    editor.value.chain().focus().insertFontAwesomeIcon({
+      icon: cleanClass,
+      color: iconColor.value,
+      size: iconSize.value
+    }).run()
+    
+    showIconModal.value = false
+    iconClass.value = ''
+  } catch (error) {
+    console.error('插入圖示失敗:', error)
+    alert('插入圖示失敗，請稍後再試')
+  }
+}
+
+const insertEmoji = (emoji) => {
+  if (!editor.value) return
+  editor.value.chain().focus().insertContent(emoji).run()
+  showEmojiPicker.value = false
+}
+
+const uploadImage = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      selectedImageFile.value = file
+      imageFilename.value = file.name
+      showImageUploadModal.value = true
+    }
+  }
+  input.click()
+}
+
+const confirmImageUpload = async () => {
+  if (!editor.value || !selectedImageFile.value) return
+  
+  const formData = new FormData()
+  formData.append('image', selectedImageFile.value)
+  
+  if (imageFilename.value.trim()) {
+    formData.append('filename', imageFilename.value.trim())
+  }
+  
+  if (imageTags.value.trim()) {
+    const tags = imageTags.value.trim().split(/\s+/)
+    formData.append('tags', JSON.stringify(tags))
+  }
+  
+  try {
+    const response = await axios.post('/admin/photos/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    
+    const url = response.data.url
+    editor.value.chain().focus().setImage({ src: url }).run()
+    
+    showImageUploadModal.value = false
+    imageTags.value = ''
+    imageFilename.value = ''
+    selectedImageFile.value = null
+  } catch (error) {
+    console.error('圖片上傳失敗:', error)
+    alert('圖片上傳失敗，請稍後再試')
+  }
 }
 
 // 圖片縮放功能
@@ -571,26 +708,27 @@ const handleImageMouseUp = () => {
   document.removeEventListener('mouseup', handleImageMouseUp)
 }
 
-watch(editor, (newEditor) => {
-  if (newEditor) {
-    const editorEl = newEditor.view.dom
-    editorEl.addEventListener('mousedown', handleImageMouseDown)
-  }
+onMounted(() => {
+  // 移除此處的事件監聽器設定，改用 onCreate 回調
 })
 
 onUnmounted(() => {
-  if (editor.value) {
-    const editorEl = editor.value.view.dom
-    editorEl.removeEventListener('mousedown', handleImageMouseDown)
+  clearTimeout(compositionTimer)
+  clearTimeout(typingTimer)
+  if (editor.value && !editor.value.isDestroyed && editor.value.view && editor.value.view.dom) {
+    editor.value.view.dom.removeEventListener('mousedown', handleImageMouseDown)
   }
   document.removeEventListener('mousemove', handleImageMouseMove)
   document.removeEventListener('mouseup', handleImageMouseUp)
+  if (editor.value) {
+    editor.value.destroy()
+  }
 })
 
 </script>
 
 <template>
-  <div class="editor-wrapper bg-white rounded-lg shadow overflow-hidden relative">
+  <div class="editor-wrapper bg-white rounded-lg shadow overflow-hidden relative h-full flex flex-col">
     <!-- Image Resize Handle (hidden, handled by CSS) -->
     <ZhuyinSelector
       :show="showZhuyinSelector"
@@ -896,12 +1034,12 @@ onUnmounted(() => {
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入塗鴉</span>
       </button>
       <button
-        @click="addImageAnnotation"
+        @click="uploadImage"
         class="group relative p-2 rounded hover:bg-gray-200"
-        title="插入圖片標註"
+        title="上傳圖片"
       >
         <ImagePlus :size="20" />
-        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入圖片標註</span>
+        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">上傳圖片</span>
       </button>
       <button
         @click="addChart"
@@ -935,6 +1073,22 @@ onUnmounted(() => {
       >
         <TableIcon :size="20" />
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入表格</span>
+      </button>
+      <button
+        @click="showIconModal = true"
+        class="group relative p-2 rounded hover:bg-gray-200"
+        title="插入圖示"
+      >
+        <Smile :size="20" />
+        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入圖示</span>
+      </button>
+      <button
+        @click="showEmojiPicker = !showEmojiPicker"
+        class="group relative p-2 rounded hover:bg-gray-200"
+        title="表情符號"
+      >
+        <span class="text-lg">😊</span>
+        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">表情符號</span>
       </button>
       
       <div class="w-px h-6 bg-gray-300 mx-1"></div>
@@ -1032,6 +1186,26 @@ onUnmounted(() => {
       </div>
     </div>
     
+    <!-- Emoji Picker -->
+    <div v-if="showEmojiPicker" class="absolute top-16 right-4 bg-white rounded-lg shadow-xl p-4 w-80 max-h-96 overflow-y-auto z-50 border">
+      <div class="flex justify-between items-center mb-3">
+        <h4 class="font-medium text-sm">選擇表情符號</h4>
+        <button @click="showEmojiPicker = false" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="grid grid-cols-8 gap-2">
+        <button
+          v-for="(emoji, index) in emojis"
+          :key="index"
+          @click="insertEmoji(emoji)"
+          class="text-2xl hover:bg-gray-100 rounded p-1 transition-colors"
+        >
+          {{ emoji }}
+        </button>
+      </div>
+    </div>
+    
     <!-- Table Modal -->
     <div v-if="showTableModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="bg-white rounded-lg shadow-xl p-6 w-96">
@@ -1070,6 +1244,89 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Image Upload Modal -->
+    <div v-if="showImageUploadModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 class="text-lg font-bold mb-4">上傳圖片</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">檔案名稱</label>
+            <input
+              v-model="imageFilename"
+              type="text"
+              class="w-full px-3 py-2 border rounded"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">標籤（以空格分隔）</label>
+            <input
+              v-model="imageTags"
+              type="text"
+              placeholder="例：風景 自然 山水"
+              class="w-full px-3 py-2 border rounded"
+            />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button @click="showImageUploadModal = false; imageTags = ''; imageFilename = ''; selectedImageFile = null" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+            取消
+          </button>
+          <button @click="confirmImageUpload" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            上傳
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Icon Modal -->
+    <div v-if="showIconModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 class="text-lg font-bold mb-4">插入 FontAwesome 圖示</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">圖示類別</label>
+            <input
+              v-model="iconClass"
+              type="text"
+              placeholder="fa-solid fa-star"
+              class="w-full px-3 py-2 border rounded"
+            />
+            <p class="text-xs text-gray-500 mt-1">範例: fa-solid fa-heart, fa-regular fa-lightbulb</p>
+            <p class="text-xs text-red-500 mt-1">請只輸入類別名稱，不要包含 HTML 標籤</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">顏色</label>
+            <input
+              v-model="iconColor"
+              type="color"
+              class="w-full h-10 border rounded cursor-pointer"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">大小</label>
+            <select v-model="iconSize" class="w-full px-3 py-2 border rounded">
+              <option value="0.8em">0.8em</option>
+              <option value="1em">1em</option>
+              <option value="1.2em">1.2em</option>
+              <option value="1.5em">1.5em</option>
+              <option value="2em">2em</option>
+            </select>
+          </div>
+          <div class="p-4 bg-gray-50 rounded text-center">
+            <i :class="iconClass" :style="{ color: iconColor, fontSize: iconSize }"></i>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button @click="showIconModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+            取消
+          </button>
+          <button @click="insertIcon" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            插入
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- HTML Editor Modal -->
     <div v-if="showHtmlModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[90vh] flex flex-col">
@@ -1089,7 +1346,9 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    <editor-content :editor="editor" />
+    <div class="flex-1 overflow-auto">
+      <editor-content :editor="editor" class="h-full" />
+    </div>
   </div>
 </template>
 
@@ -1097,8 +1356,18 @@ onUnmounted(() => {
 /* Basic Editor Styles */
 .ProseMirror {
   outline: none;
-  min-height: 300px;
+  min-height: 100%;
+  height: 100%;
   padding: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .ProseMirror {
+    max-width: 100%;
+  }
 }
 
 .ProseMirror p {
@@ -1107,23 +1376,36 @@ onUnmounted(() => {
 
 /* Zhuyin (Bopomofo) Styling */
 ruby {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  margin: 0 0.1em;
-  line-height: 1.2;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  vertical-align: baseline !important;
+  margin: 0 0.15em !important;
+  line-height: 1.8 !important;
 }
 
-ruby > rt {
-  display: block;
-  font-size: 0.4em; /* Adjust size as needed */
-  writing-mode: vertical-rl; /* Vertical text for Zhuyin */
-  text-orientation: upright; /* Keep symbols upright */
-  margin-left: 0.2em; /* Space between char and zhuyin */
-  line-height: 1;
-  letter-spacing: -0.1em; /* Tighten vertical spacing if needed */
-  font-family: "Bopomofo", sans-serif; /* Optional: prefer fonts with good Zhuyin support */
-  transform: translateY(-0.5em); /* Move zhuyin higher */
+ruby > rt,
+ruby rt {
+  display: inline-block !important;
+  font-size: 0.5em !important;
+  writing-mode: vertical-rl !important;
+  text-orientation: upright !important;
+  margin-left: 0.15em !important;
+  line-height: 1 !important;
+  font-family: "Bopomofo", "Microsoft JhengHei", sans-serif !important;
+  color: inherit !important;
+  white-space: nowrap !important;
+}
+
+.ProseMirror ruby {
+  display: inline-flex !important;
+  flex-direction: row !important;
+}
+
+.ProseMirror ruby > rt,
+.ProseMirror ruby rt {
+  writing-mode: vertical-rl !important;
+  text-orientation: upright !important;
 }
 
 /* Active Button State */

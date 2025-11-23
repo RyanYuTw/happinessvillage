@@ -15,7 +15,7 @@ export const RubyNode = Node.create({
                 default: '',
             },
             size: {
-                default: 0.3,
+                default: 0.35,
             },
         }
     },
@@ -24,14 +24,16 @@ export const RubyNode = Node.create({
         return [
             {
                 tag: 'ruby',
+                priority: 51,
                 getAttrs: element => {
-                    const rt = element.querySelector('rt')
+                    const rtElement = element.querySelector('rt')
                     const size = element.getAttribute('data-size')
                     return {
-                        rt: rt ? rt.textContent : '',
-                        size: size ? parseFloat(size) : 0.3
+                        rt: rtElement ? rtElement.textContent.trim() : '',
+                        size: size ? parseFloat(size) : 0.35
                     }
                 },
+                contentElement: 'span'
             },
         ]
     },

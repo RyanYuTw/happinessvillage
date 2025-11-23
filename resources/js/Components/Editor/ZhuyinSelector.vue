@@ -32,8 +32,14 @@ const handleKeydown = (e) => {
   }
 }
 
+const cleanZhuyin = (zhuyin) => {
+  if (!zhuyin) return zhuyin
+  // 移除所有括號及其內容（全形和半形）
+  return zhuyin.replace(/[\uff08(][^\uff09)]*[\uff09)]/g, '').trim()
+}
+
 const select = (zhuyin) => {
-  emit('resolve', zhuyin)
+  emit('resolve', cleanZhuyin(zhuyin))
 }
 
 onMounted(() => {
@@ -72,7 +78,7 @@ onUnmounted(() => {
               {{ idx + 1 }}
             </span>
             <span class="text-lg font-medium text-gray-700 font-bopomofo">
-              {{ zhuyin }}
+              {{ cleanZhuyin(zhuyin) }}
             </span>
           </button>
         </div>

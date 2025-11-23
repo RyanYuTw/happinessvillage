@@ -19,17 +19,23 @@ onMounted(() => {
 const initCanvas = () => {
   if (canvasEl.value) {
     canvas = new fabric.Canvas(canvasEl.value, {
-      isDrawingMode: true,
-      width: 500,
-      height: 400, // Default, will adjust to image
+      isDrawingMode: false,
+      width: 600,
+      height: 400,
     })
+    
+    canvas.freeDrawingBrush = new fabric.PencilBrush(canvas)
+    canvas.freeDrawingBrush.width = 3
+    canvas.freeDrawingBrush.color = '#000000'
 
     if (imageUrl.value) {
       loadImage(imageUrl.value)
     }
 
     if (props.node.attrs.drawing) {
-      canvas.loadFromJSON(props.node.attrs.drawing, canvas.renderAll.bind(canvas))
+      canvas.loadFromJSON(props.node.attrs.drawing, () => {
+        canvas.renderAll()
+      })
     }
 
     canvas.on('path:created', save)
@@ -51,10 +57,9 @@ const handleFileUpload = (event) => {
 }
 
 const loadImage = (url) => {
-  fabric.Image.fromURL(url, (img) => {
+  fabric.FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
     if (!canvas) return
     
-    // Resize canvas to match image (max width 600)
     const maxWidth = 600
     let width = img.width
     let height = img.height
@@ -63,12 +68,23 @@ const loadImage = (url) => {
       const scale = maxWidth / width
       width = maxWidth
       height = height * scale
-      img.scale(scale)
     }
     
     canvas.setWidth(width)
     canvas.setHeight(height)
-    canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas))
+    
+    img.set({
+      scaleX: width / img.width,
+      scaleY: height / img.height,
+      selectable: false,
+      evented: false
+    })
+    
+    canvas.setBackgroundImage(img, () => {
+      canvas.renderAll()
+    })
+  }).catch((err) => {
+    console.error('圖片載入失敗:', err)
   })
 }
 
@@ -104,12 +120,17 @@ const save = () => {
   }
 }
 
+const toggleDrawing = () => {
+  if (canvas) {
+    canvas.isDrawingMode = !canvas.isDrawingMode
+  }
+}
+
 const clearDrawing = () => {
   if (canvas) {
-    canvas.clear()
-    if (imageUrl.value) {
-      loadImage(imageUrl.value)
-    }
+    const objects = canvas.getObjects()
+    objects.forEach(obj => canvas.remove(obj))
+    canvas.renderAll()
     save()
   }
 }
@@ -129,10 +150,13 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else ref="containerEl" class="relative">
-      <div class="controls mb-1 flex gap-2 justify-end">
+      <div class="controls mb-2 flex gap-2 justify-end">
+        <button @click="toggleDrawing" :class="canvas?.isDrawingMode ? 'bg-green-500 text-white' : 'bg-gray-200'" class="text-xs px-2 py-1 rounded">
+          {{ canvas?.isDrawingMode ? '塗鴉中' : '啟用塗鴉' }}
+        </button>
         <button @click="addInput" class="text-xs bg-blue-500 text-white px-2 py-1 rounded">新增輸入框</button>
         <button @click="clearDrawing" class="text-xs text-red-500 border px-2 py-1 rounded">清除塗鴉</button>
-        <button @click="imageUrl = ''; inputs = []" class="text-xs text-gray-500 border px-2 py-1 rounded">更換圖片</button>
+        <button @click="imageUrl = ''; inputs = []; save()" class="text-xs text-gray-500 border px-2 py-1 rounded">更換圖片</button>
       </div>
       
       <div class="canvas-wrapper relative">
