@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/handbooks/create', [HandbookController::class, 'create'])->name('handbooks.create');
         Route::post('/handbooks', [HandbookController::class, 'store'])->name('handbooks.store');
         Route::get('/handbooks/{id}', [HandbookController::class, 'show'])->name('handbooks.show');
+        Route::get('/handbooks/{id}/preview', [HandbookController::class, 'preview'])->name('handbooks.preview');
         Route::get('/handbooks/{id}/edit', [HandbookController::class, 'edit'])->name('handbooks.edit');
         Route::put('/handbooks/{id}', [HandbookController::class, 'update'])->name('handbooks.update');
         Route::delete('/handbooks/{id}', [HandbookController::class, 'destroy'])->name('handbooks.destroy');

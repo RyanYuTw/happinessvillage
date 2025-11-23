@@ -33,22 +33,29 @@ export default Node.create({
   parseHTML() {
     return [
       {
-        tag: 'input-field',
+        tag: 'span[data-input-field]',
         getAttrs: element => ({
-          value: element.getAttribute('value') || '',
-          x: parseInt(element.getAttribute('x')) || 100,
-          y: parseInt(element.getAttribute('y')) || 100,
+          value: element.getAttribute('data-value') || '',
+          x: parseInt(element.getAttribute('data-x')) || 100,
+          y: parseInt(element.getAttribute('data-y')) || 100,
         }),
       },
     ]
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['input-field', mergeAttributes(HTMLAttributes, {
+    return ['span', {
+      'data-input-field': 'true',
+      'data-value': HTMLAttributes.value,
+      'data-x': HTMLAttributes.x,
+      'data-y': HTMLAttributes.y,
+      style: `position: absolute; left: ${HTMLAttributes.x}px; top: ${HTMLAttributes.y}px; z-index: 1000;`
+    }, ['input', {
+      type: 'text',
       value: HTMLAttributes.value,
-      x: HTMLAttributes.x,
-      y: HTMLAttributes.y,
-    })]
+      readonly: 'readonly',
+      style: 'width: 30px; border: 1px solid #d1d5db; border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;'
+    }]]
   },
 
   addNodeView() {

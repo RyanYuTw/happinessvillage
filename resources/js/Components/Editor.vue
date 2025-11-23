@@ -83,6 +83,7 @@ const showImageUploadModal = ref(false)
 const imageTags = ref('')
 const imageFilename = ref('')
 const selectedImageFile = ref(null)
+const imageAlign = ref('left')
 
 const emojis = [
   '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗',
@@ -123,6 +124,11 @@ const editor = useEditor({
       codeBlock: false,
       underline: false,
       blockquote: false,
+      paragraph: {
+        HTMLAttributes: {
+          style: 'white-space: pre-wrap;'
+        }
+      },
     }),
     Blockquote,
     TaskList,
@@ -160,7 +166,20 @@ const editor = useEditor({
           style: { default: null },
           'data-border-width': { default: null },
           'data-border-color': { default: null },
+          'data-align': { default: 'left' },
         }
+      },
+      renderHTML({ HTMLAttributes }) {
+        const align = HTMLAttributes['data-align'] || 'left'
+        let alignClass = ''
+        if (align === 'center') alignClass = 'mx-auto block'
+        else if (align === 'right') alignClass = 'ml-auto block'
+        else alignClass = 'mr-auto block'
+        
+        return ['img', {
+          ...HTMLAttributes,
+          class: alignClass
+        }]
       },
     }).configure({
       inline: false,
@@ -219,8 +238,42 @@ const editor = useEditor({
   ],
   onUpdate: ({ editor, transaction }) => {
     emit('update:modelValue', editor.getHTML())
+    
+    // 更新字體大小選單
+    const { from } = editor.state.selection
+    const marks = editor.state.doc.resolve(from).marks()
+    const textStyleMark = marks.find(mark => mark.type.name === 'textStyle')
+    if (textStyleMark && textStyleMark.attrs.fontSize) {
+      fontSize.value = textStyleMark.attrs.fontSize
+    }
+  },
+  onSelectionUpdate: ({ editor }) => {
+    // 游標移動時更新字體大小和字型選單
+    const { from } = editor.state.selection
+    const marks = editor.state.doc.resolve(from).marks()
+    const textStyleMark = marks.find(mark => mark.type.name === 'textStyle')
+    
+    if (textStyleMark) {
+      if (textStyleMark.attrs.fontSize) {
+        fontSize.value = textStyleMark.attrs.fontSize
+      } else {
+        fontSize.value = '16px'
+      }
+      
+      if (textStyleMark.attrs.fontFamily) {
+        fontFamily.value = textStyleMark.attrs.fontFamily
+      } else {
+        fontFamily.value = 'Arial'
+      }
+    } else {
+      fontSize.value = '16px'
+      fontFamily.value = 'Arial'
+    }
   },
   editorProps: {
+    transformPastedHTML(html) {
+      return html.replace(/ /g, '&nbsp;')
+    },
     handleDOMEvents: {
       compositionstart: () => {
         isComposing.value = true
@@ -659,12 +712,16 @@ const confirmImageUpload = async () => {
     })
     
     const url = response.data.url
-    editor.value.chain().focus().setImage({ src: url }).run()
+    editor.value.chain().focus().setImage({ 
+      src: url,
+      'data-align': imageAlign.value 
+    }).run()
     
     showImageUploadModal.value = false
     imageTags.value = ''
     imageFilename.value = ''
     selectedImageFile.value = null
+    imageAlign.value = 'left'
   } catch (error) {
     console.error('圖片上傳失敗:', error)
     alert('圖片上傳失敗，請稍後再試')
@@ -703,6 +760,25 @@ const handleImageMouseMove = (e) => {
 }
 
 const handleImageMouseUp = () => {
+  if (resizingImg && editor.value) {
+    const newWidth = parseInt(resizingImg.style.width)
+    const newHeight = parseInt(resizingImg.style.height)
+    const imgSrc = resizingImg.getAttribute('src')
+    
+    // 更新圖片節點屬性
+    editor.value.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'image' && node.attrs.src === imgSrc) {
+        const tr = editor.value.state.tr.setNodeMarkup(pos, null, {
+          ...node.attrs,
+          width: newWidth,
+          height: newHeight
+        })
+        editor.value.view.dispatch(tr)
+        return false
+      }
+    })
+  }
+  
   resizingImg = null
   document.removeEventListener('mousemove', handleImageMouseMove)
   document.removeEventListener('mouseup', handleImageMouseUp)
@@ -875,18 +951,6 @@ onUnmounted(() => {
         title="減少縮排"
       >
         <OutdentIcon :size="20" />
-        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">減少縮排</span>
-      </button>
-      
-      <div class="w-px h-6 bg-gray-300 mx-1"></div>
-      
-      <!-- 對齊 -->
-      <button
-        @click="editor.chain().focus().indent().run()"
-        class="group relative p-2 rounded hover:bg-gray-200"
-        title="增加縮排"
-      >
-        <IndentIcon :size="20" />
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">減少縮排</span>
       </button>
       
@@ -1266,9 +1330,17 @@ onUnmounted(() => {
               class="w-full px-3 py-2 border rounded"
             />
           </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">對齊方式</label>
+            <select v-model="imageAlign" class="w-full px-3 py-2 border rounded">
+              <option value="left">靠左</option>
+              <option value="center">置中</option>
+              <option value="right">靠右</option>
+            </select>
+          </div>
         </div>
         <div class="flex justify-end gap-2 mt-4">
-          <button @click="showImageUploadModal = false; imageTags = ''; imageFilename = ''; selectedImageFile = null" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+          <button @click="showImageUploadModal = false; imageTags = ''; imageFilename = ''; selectedImageFile = null; imageAlign = 'left'" class="px-4 py-2 text-gray-600 hover:text-gray-800">
             取消
           </button>
           <button @click="confirmImageUpload" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
@@ -1372,6 +1444,7 @@ onUnmounted(() => {
 
 .ProseMirror p {
   margin-bottom: 0.5em;
+  white-space: pre-wrap;
 }
 
 /* Zhuyin (Bopomofo) Styling */
@@ -1421,6 +1494,21 @@ ruby rt {
   display: block;
   margin: 1rem 0;
   cursor: nwse-resize;
+}
+
+.ProseMirror img[data-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ProseMirror img[data-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.ProseMirror img[data-align="left"] {
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .ProseMirror img:hover {

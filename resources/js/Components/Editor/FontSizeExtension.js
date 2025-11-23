@@ -5,7 +5,7 @@ export const FontSize = Extension.create({
 
     addOptions() {
         return {
-            types: ['textStyle'],
+            types: ['textStyle', 'paragraph', 'heading'],
         }
     },
 
