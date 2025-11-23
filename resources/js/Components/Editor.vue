@@ -273,7 +273,7 @@ const editor = useEditor({
       }
     },
     attributes: {
-      class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[300px] p-4 border rounded-md shadow-sm',
+      class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none p-4 border rounded-md shadow-sm',
     }
   },
 })
@@ -728,7 +728,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="editor-wrapper bg-white rounded-lg shadow overflow-hidden relative h-full flex flex-col">
+  <div class="editor-wrapper bg-white rounded-lg shadow overflow-hidden relative flex flex-col">
     <!-- Image Resize Handle (hidden, handled by CSS) -->
     <ZhuyinSelector
       :show="showZhuyinSelector"
@@ -1346,7 +1346,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    <div class="flex-1 overflow-auto">
+    <div class="flex-1 overflow-auto relative">
       <editor-content :editor="editor" class="h-full" />
     </div>
   </div>
@@ -1356,12 +1356,12 @@ onUnmounted(() => {
 /* Basic Editor Styles */
 .ProseMirror {
   outline: none;
-  min-height: 100%;
-  height: 100%;
   padding: 1rem;
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
+  min-height: calc(100vh - 350px);
+  position: relative;
 }
 
 @media (max-width: 1024px) {

@@ -11,6 +11,8 @@ export default Node.create({
 
   atom: true,
 
+  selectable: true,
+
   addAttributes() {
     return {
       value: {
@@ -19,6 +21,12 @@ export default Node.create({
       placeholder: {
         default: '輸入文字...',
       },
+      x: {
+        default: 100,
+      },
+      y: {
+        default: 100,
+      },
     }
   },
 
@@ -26,12 +34,21 @@ export default Node.create({
     return [
       {
         tag: 'input-field',
+        getAttrs: element => ({
+          value: element.getAttribute('value') || '',
+          x: parseInt(element.getAttribute('x')) || 100,
+          y: parseInt(element.getAttribute('y')) || 100,
+        }),
       },
     ]
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['input-field', mergeAttributes(HTMLAttributes)]
+    return ['input-field', mergeAttributes(HTMLAttributes, {
+      value: HTMLAttributes.value,
+      x: HTMLAttributes.x,
+      y: HTMLAttributes.y,
+    })]
   },
 
   addNodeView() {

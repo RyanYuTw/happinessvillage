@@ -10,8 +10,10 @@ let canvas = null
 const drawMode = ref('free')
 const drawColor = ref('#000000')
 const strokeWidth = ref(2)
+const strokeDashArray = ref([])
 const imageBorderWidth = ref(0)
 const imageBorderColor = ref('#000000')
+const imageBorderStyle = ref('solid')
 const bgImageInput = ref(null)
 let isDrawing = false
 let startX, startY
@@ -66,7 +68,23 @@ const updateBrushSettings = () => {
     canvas.freeDrawingBrush = new fabric.PencilBrush(canvas)
     canvas.freeDrawingBrush.color = drawColor.value
     canvas.freeDrawingBrush.width = strokeWidth.value
+    canvas.freeDrawingBrush.strokeDashArray = strokeDashArray.value
   }
+}
+
+const setStrokeStyle = (style) => {
+  switch(style) {
+    case 'solid':
+      strokeDashArray.value = []
+      break
+    case 'dashed':
+      strokeDashArray.value = [10, 5]
+      break
+    case 'dotted':
+      strokeDashArray.value = [2, 5]
+      break
+  }
+  updateBrushSettings()
 }
 
 const handleMouseDown = (e) => {
@@ -83,6 +101,7 @@ const handleMouseDown = (e) => {
       currentShape = new fabric.Line([startX, startY, startX, startY], {
         stroke: drawColor.value,
         strokeWidth: strokeWidth.value,
+        strokeDashArray: strokeDashArray.value,
       })
       break
     case 'rect':
@@ -94,6 +113,7 @@ const handleMouseDown = (e) => {
         fill: 'transparent',
         stroke: drawColor.value,
         strokeWidth: strokeWidth.value,
+        strokeDashArray: strokeDashArray.value,
       })
       break
     case 'circle':
@@ -104,6 +124,7 @@ const handleMouseDown = (e) => {
         fill: 'transparent',
         stroke: drawColor.value,
         strokeWidth: strokeWidth.value,
+        strokeDashArray: strokeDashArray.value,
       })
       break
     case 'triangle':
@@ -115,6 +136,7 @@ const handleMouseDown = (e) => {
         fill: 'transparent',
         stroke: drawColor.value,
         strokeWidth: strokeWidth.value,
+        strokeDashArray: strokeDashArray.value,
       })
       break
   }
@@ -175,6 +197,7 @@ const setDrawMode = (mode) => {
   canvas.isDrawingMode = mode === 'free'
 }
 
+
 const save = () => {
   if (canvas) {
     const json = canvas.toJSON()
@@ -203,7 +226,8 @@ const handleBackgroundUpload = (e) => {
   reader.onload = (event) => {
     fabric.FabricImage.fromURL(event.target.result).then((img) => {
       img.scaleToWidth(canvas.width)
-      img.scaleToHeight(canvas.height)
+      const scaledHeight = img.height * img.scaleX
+      canvas.setHeight(scaledHeight)
       canvas.backgroundImage = img
       canvas.renderAll()
       save()
@@ -228,7 +252,7 @@ const saveAsImage = () => {
     
     // 建立框線樣式
     const borderStyle = imageBorderWidth.value > 0 
-      ? `border: ${imageBorderWidth.value}px solid ${imageBorderColor.value};` 
+      ? `border: ${imageBorderWidth.value}px ${imageBorderStyle.value} ${imageBorderColor.value};` 
       : ''
     
     editor.chain()
@@ -247,6 +271,14 @@ const saveAsImage = () => {
   }
 }
 
+const deleteAttributes = () => {
+  const { editor, getPos } = props
+  if (editor && typeof getPos === 'function') {
+    const pos = getPos()
+    editor.chain().focus().deleteRange({ from: pos, to: pos + props.node.nodeSize }).run()
+  }
+}
+
 onBeforeUnmount(() => {
   if (canvas) {
     canvas.dispose()
@@ -258,6 +290,13 @@ onBeforeUnmount(() => {
   <node-view-wrapper class="drawing-node my-4 border rounded shadow-sm block bg-white p-2" style="width: fit-content; max-width: 100%;">
     <div class="controls mb-2 flex gap-2 items-center flex-wrap">
       <span class="text-xs text-gray-600 font-medium">工具:</span>
+      <button 
+        @click="setDrawMode('select')" 
+        :class="{ 'bg-blue-500 text-white': drawMode === 'select' }"
+        class="text-xs px-2 py-1 border rounded hover:bg-gray-100"
+      >
+        選取
+      </button>
       <button 
         @click="setDrawMode('free')" 
         :class="{ 'bg-blue-500 text-white': drawMode === 'free' }"
@@ -318,6 +357,31 @@ onBeforeUnmount(() => {
       
       <div class="w-px h-6 bg-gray-300 mx-1"></div>
       
+      <span class="text-xs text-gray-600 font-medium">線條:</span>
+      <button 
+        @click="setStrokeStyle('solid')" 
+        class="text-xs px-2 py-1 border rounded hover:bg-gray-100"
+        title="實線"
+      >
+        ──
+      </button>
+      <button 
+        @click="setStrokeStyle('dashed')" 
+        class="text-xs px-2 py-1 border rounded hover:bg-gray-100"
+        title="虛線"
+      >
+        ━ ━
+      </button>
+      <button 
+        @click="setStrokeStyle('dotted')" 
+        class="text-xs px-2 py-1 border rounded hover:bg-gray-100"
+        title="點線"
+      >
+        ・・・
+      </button>
+      
+      <div class="w-px h-6 bg-gray-300 mx-1"></div>
+      
       <input 
         ref="bgImageInput" 
         type="file" 
@@ -352,6 +416,16 @@ onBeforeUnmount(() => {
         class="w-8 h-6 border rounded cursor-pointer"
         title="框線顏色"
       />
+      <select 
+        v-model="imageBorderStyle"
+        :disabled="imageBorderWidth === 0"
+        class="text-xs px-1 py-1 border rounded"
+      >
+        <option value="solid">實線</option>
+        <option value="dashed">虛線</option>
+        <option value="dotted">點線</option>
+        <option value="double">雙線</option>
+      </select>
       
       <div class="flex-1"></div>
       <button @click="saveAsImage" class="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 border rounded bg-blue-50 hover:bg-blue-100">
@@ -359,6 +433,9 @@ onBeforeUnmount(() => {
       </button>
       <button @click="clear" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border rounded">
         清除
+      </button>
+      <button @click="deleteAttributes" class="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border rounded">
+        取消
       </button>
     </div>
     <div class="canvas-container w-full overflow-auto">
