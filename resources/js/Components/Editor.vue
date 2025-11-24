@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { BubbleMenu } from '@tiptap/vue-3/menus'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -25,7 +26,7 @@ import { Highlight } from '@tiptap/extension-highlight'
 import { FontFamily } from '@tiptap/extension-font-family'
 import TextBox from './Editor/TextBoxExtension'
 import Image from '@tiptap/extension-image'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, NodeSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import Indent from './Editor/IndentExtension'
 import Underline from '@tiptap/extension-underline'
@@ -66,7 +67,9 @@ const zhuyinSize = ref(0.35) // Default Zhuyin size
 const fontSize = ref('16px') // Default font size
 const showLinkModal = ref(false)
 const linkUrl = ref('')
-const showTableModal = ref(false)
+const showTableGrid = ref(false)
+const tableGridSize = ref({ rows: 0, cols: 0 })
+const hoverTableGridSize = ref({ rows: 0, cols: 0 })
 const textColor = ref('#000000')
 const bgColor = ref('#ffff00')
 const fontFamily = ref('Arial')
@@ -101,6 +104,7 @@ const emojis = [
 const htmlContent = ref('')
 const isRealTimeZhuyin = ref(false)
 const isComposing = ref(false)
+const isTableSelected = ref(false)
 let typingTimer = null
 let lastConvertedPosition = -1
 let isConverting = ref(false)
@@ -118,6 +122,33 @@ const editor = useEditor({
     if (editor.view && editor.view.dom) {
       editor.view.dom.addEventListener('mousedown', handleImageMouseDown)
     }
+    
+    // 為現有的表格添加預設屬性
+    setTimeout(() => {
+      const { state } = editor
+      let tr = state.tr
+      let modified = false
+      
+      state.doc.descendants((node, pos) => {
+        if (node.type.name === 'table') {
+          const hasAlign = node.attrs['data-align'] !== undefined && node.attrs['data-align'] !== null && node.attrs['data-align'] !== ''
+          const hasBorder = node.attrs['data-border'] !== undefined && node.attrs['data-border'] !== null && node.attrs['data-border'] !== ''
+          
+          if (!hasAlign || !hasBorder) {
+            tr = tr.setNodeMarkup(pos, null, {
+              ...node.attrs,
+              'data-align': node.attrs['data-align'] || 'left',
+              'data-border': node.attrs['data-border'] || '1'
+            })
+            modified = true
+          }
+        }
+      })
+      
+      if (modified) {
+        editor.view.dispatch(tr)
+      }
+    }, 100)
   },
   extensions: [
     StarterKit.extend({
@@ -207,6 +238,10 @@ const editor = useEditor({
       width: 640,
       height: 480,
     }),
+    Youtube.configure({
+      width: 640,
+      height: 480,
+    }),
     Table.extend({
       addAttributes() {
         return {
@@ -215,33 +250,42 @@ const editor = useEditor({
             default: 'left',
             parseHTML: element => element.getAttribute('data-align') || 'left',
             renderHTML: attributes => {
-              return { 'data-align': attributes['data-align'] }
+              return { 'data-align': attributes['data-align'] || 'left' }
             },
           },
           'data-border': {
             default: '1',
             parseHTML: element => element.getAttribute('data-border') || '1',
             renderHTML: attributes => {
-              return { 'data-border': attributes['data-border'] }
+              return { 'data-border': attributes['data-border'] || '1' }
             },
           },
         }
       },
+      renderHTML({ node, HTMLAttributes }) {
+        return [
+          'table',
+          {
+            ...HTMLAttributes,
+            'data-align': node.attrs['data-align'] || 'left',
+            'data-border': node.attrs['data-border'] || '1',
+          },
+          ['tbody', 0]
+        ]
+      },
     }).configure({
       resizable: true,
-      HTMLAttributes: {
-        class: 'border-collapse border border-gray-300',
-      },
+      allowTableNodeSelection: true,
     }),
     TableRow,
     TableHeader.configure({
       HTMLAttributes: {
-        class: 'border border-gray-300 bg-gray-100 font-bold p-2',
+        class: 'bg-gray-100 font-bold p-2',
       },
     }),
     TableCell.configure({
       HTMLAttributes: {
-        class: 'border border-gray-300 p-2',
+        class: 'p-2',
       },
     }),
     Color,
@@ -263,7 +307,7 @@ const editor = useEditor({
       },
     }),
     TextAlign.configure({
-      types: ['heading', 'paragraph'],
+      types: ['heading', 'paragraph', 'tableCell', 'tableHeader'],
       alignments: ['left', 'center', 'right', 'justify'],
       defaultShortcuts: false, // Disable default shortcuts to prevent Ctrl+R conflict
     }),
@@ -301,6 +345,9 @@ const editor = useEditor({
       fontSize.value = '16px'
       fontFamily.value = 'Arial'
     }
+    
+    // Check if table is selected
+    isTableSelected.value = editor.isActive('table') || editor.state.selection.node?.type.name === 'table'
   },
   editorProps: {
     transformPastedHTML(html) {
@@ -365,13 +412,7 @@ const editor = useEditor({
 
 const addInputField = () => {
   if (!editor.value) return
-  const isInTable = editor.value.isActive('tableCell') || editor.value.isActive('tableHeader')
-  if (isInTable) {
-    // 表格內插入簡單的占位符，在預覽時才轉換為 input
-    editor.value.chain().focus().insertContent('______').run()
-  } else {
-    editor.value.chain().focus().insertContent({ type: 'inputField' }).run()
-  }
+  editor.value.chain().focus().insertContent({ type: 'inputField' }).run()
 }
 
 const addDrawing = () => {
@@ -545,9 +586,47 @@ const addVideo = () => {
   }
 }
 
-const insertTable = () => {
-  editor.value.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run()
-  showTableModal.value = false
+const insertTable = (rows, cols) => {
+  editor.value.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run()
+  
+  // 在下一個 tick 選取剛插入的表格並設定預設屬性
+  setTimeout(() => {
+    if (!editor.value || !editor.value.view) return
+    
+    const { state } = editor.value
+    const { selection } = state
+    const { $from } = selection
+    let tablePos = null
+    
+    // 從當前位置往上找表格
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d)
+      if (node.type.name === 'table') {
+        tablePos = $from.before(d)
+        break
+      }
+    }
+    
+    if (tablePos !== null) {
+      try {
+        const tableNode = state.doc.nodeAt(tablePos)
+        // 確保表格有正確的預設屬性
+        let tr = state.tr.setNodeMarkup(tablePos, null, {
+          ...tableNode.attrs,
+          'data-align': 'left',
+          'data-border': '1'
+        })
+        // 選取表格
+        tr = tr.setSelection(NodeSelection.create(tr.doc, tablePos))
+        editor.value.view.dispatch(tr)
+        editor.value.view.focus()
+      } catch (e) {
+        console.error('Error selecting table:', e)
+      }
+    }
+  }, 100)
+  
+  showTableGrid.value = false
 }
 
 const addTableRow = () => {
@@ -578,47 +657,77 @@ const deleteTable = () => {
   editor.value.chain().focus().deleteTable().run()
 }
 
+const selectTable = () => {
+  if (!editor.value) return
+  const { state, dispatch } = editor.value.view
+  const { selection } = state
+  const { $from } = selection
+  
+  // Find the table node position
+  let tablePos = -1
+  for (let d = $from.depth; d > 0; d--) {
+    const node = $from.node(d)
+    if (node.type.name === 'table') {
+      tablePos = $from.before(d)
+      break
+    }
+  }
+  
+  if (tablePos > -1) {
+    // Use setTimeout to ensure the event loop has cleared any click events
+    setTimeout(() => {
+      try {
+        if (!editor.value || !editor.value.view) return
+        
+        const { state, dispatch } = editor.value.view
+        const tr = state.tr.setSelection(NodeSelection.create(state.doc, tablePos))
+        tr.scrollIntoView()
+        dispatch(tr)
+        editor.value.view.focus()
+      } catch (e) {
+        console.error('Error setting NodeSelection:', e)
+      }
+    }, 50)
+  }
+}
+
 const setTableAlign = (align) => {
   if (!editor.value) return
-  const { state } = editor.value
-  const { selection } = state
-  let tablePos = null
-  
-  state.doc.descendants((node, pos) => {
-    if (node.type.name === 'table' && pos <= selection.from && pos + node.nodeSize >= selection.to) {
-      tablePos = pos
-      return false
-    }
-  })
-  
-  if (tablePos !== null) {
-    const tr = state.tr.setNodeMarkup(tablePos, null, {
-      ...state.doc.nodeAt(tablePos).attrs,
-      'data-align': align
-    })
-    editor.value.view.dispatch(tr)
-  }
+  editor.value.chain().focus().setTextAlign(align).run()
 }
 
 const setTableBorder = (width) => {
   if (!editor.value) return
-  const { state } = editor.value
+  const { state, view } = editor.value
   const { selection } = state
+  const { $from } = selection
   let tablePos = null
   
-  state.doc.descendants((node, pos) => {
-    if (node.type.name === 'table' && pos <= selection.from && pos + node.nodeSize >= selection.to) {
-      tablePos = pos
-      return false
+  // 先檢查是否是 NodeSelection 且選中的是表格
+  if (selection instanceof NodeSelection && selection.node.type.name === 'table') {
+    tablePos = selection.from
+  } else {
+    // 從當前位置往上找表格
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d)
+      if (node.type.name === 'table') {
+        tablePos = $from.before(d)
+        break
+      }
     }
-  })
+  }
   
   if (tablePos !== null) {
-    const tr = state.tr.setNodeMarkup(tablePos, null, {
-      ...state.doc.nodeAt(tablePos).attrs,
-      'data-border': width
-    })
-    editor.value.view.dispatch(tr)
+    const tableNode = state.doc.nodeAt(tablePos)
+    if (tableNode) {
+      const tr = state.tr.setNodeMarkup(tablePos, null, {
+        ...tableNode.attrs,
+        'data-border': width
+      })
+      view.dispatch(tr)
+      // 強制重新渲染
+      view.updateState(view.state)
+    }
   }
 }
 
@@ -1212,14 +1321,36 @@ onUnmounted(() => {
         <Video :size="20" />
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入影片</span>
       </button>
-      <button
-        @click="showTableModal = true"
-        class="group relative p-2 rounded hover:bg-gray-200"
-        title="插入表格"
-      >
-        <TableIcon :size="20" />
-        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入表格</span>
-      </button>
+      <div class="relative group">
+        <button
+          @click="showTableGrid = !showTableGrid"
+          class="p-2 rounded hover:bg-gray-200"
+          title="插入表格"
+        >
+          <TableIcon :size="20" />
+          <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入表格</span>
+        </button>
+        
+        <!-- Grid Selector Popover -->
+        <div v-if="showTableGrid" class="absolute top-full left-0 mt-1 p-2 bg-white border rounded shadow-lg z-50 w-64">
+          <div class="mb-2 text-sm text-gray-600 font-medium text-center">
+            {{ hoverTableGridSize.rows > 0 ? `${hoverTableGridSize.cols} x ${hoverTableGridSize.rows}` : '插入表格' }}
+          </div>
+          <div class="grid grid-cols-10 gap-1" @mouseleave="hoverTableGridSize = { rows: 0, cols: 0 }">
+            <div 
+              v-for="i in 100" 
+              :key="i"
+              class="w-4 h-4 border border-gray-200 cursor-pointer transition-colors"
+              :class="{
+                'bg-blue-500 border-blue-600': (i - 1) % 10 < hoverTableGridSize.cols && Math.floor((i - 1) / 10) < hoverTableGridSize.rows,
+                'bg-gray-50': !((i - 1) % 10 < hoverTableGridSize.cols && Math.floor((i - 1) / 10) < hoverTableGridSize.rows)
+              }"
+              @mouseover="hoverTableGridSize = { rows: Math.floor((i - 1) / 10) + 1, cols: ((i - 1) % 10) + 1 }"
+              @click="insertTable(hoverTableGridSize.rows, hoverTableGridSize.cols)"
+            ></div>
+          </div>
+        </div>
+      </div>
       <button
         @click="showIconModal = true"
         class="group relative p-2 rounded hover:bg-gray-200"
@@ -1307,50 +1438,63 @@ onUnmounted(() => {
       </div>
       
       <!-- 表格控制 (在表格內時顯示) -->
-      <div v-if="editor && editor.isActive('table')" class="flex items-center gap-1 ml-2 px-2 border-l border-gray-300">
-        <button @click="addTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增列">
-          +列
-        </button>
-        <button @click="deleteTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除列">
-          -列
-        </button>
-        <button @click="addTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增欄">
-          +欄
-        </button>
-        <button @click="deleteTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除欄">
-          -欄
-        </button>
-        <button @click="mergeCells" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="合併儲存格">
-          合併
-        </button>
-        <button @click="splitCell" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="分割儲存格">
-          分割
-        </button>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <button @click="setTableAlign('left')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠左">
-          靠左
-        </button>
-        <button @click="setTableAlign('center')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格置中">
-          置中
-        </button>
-        <button @click="setTableAlign('right')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠右">
-          靠右
-        </button>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <span class="text-xs text-gray-600">框線</span>
-        <select @change="setTableBorder($event.target.value)" class="text-xs border rounded px-1 py-1">
-          <option value="1">1px</option>
-          <option value="2">2px</option>
-          <option value="3">3px</option>
-          <option value="4">4px</option>
-          <option value="5">5px</option>
-        </select>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <button @click="deleteTable" class="text-xs px-2 py-1 border rounded hover:bg-red-100 text-red-600" title="刪除表格">
-          刪除表格
-        </button>
-      </div>
     </div>
+    
+    <!-- Table Bubble Menu -->
+    <bubble-menu
+      v-if="editor"
+      :editor="editor"
+      :tippy-options="{ duration: 100, placement: 'top' }"
+      :should-show="({ editor }) => editor.isActive('table') || isTableSelected"
+      class="flex items-center gap-1 p-1 bg-white border rounded shadow-lg"
+    >
+      <button @click="addTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增列">
+        +列
+      </button>
+      <button @click="deleteTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除列">
+        -列
+      </button>
+      <button @click="addTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增欄">
+        +欄
+      </button>
+      <button @click="deleteTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除欄">
+        -欄
+      </button>
+      <button @click="mergeCells" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="合併儲存格">
+        合併
+      </button>
+      <button @click="splitCell" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="分割儲存格">
+        分割
+      </button>
+      <div class="w-px h-4 bg-gray-300 mx-1"></div>
+      <button @click="setTableAlign('left')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠左">
+        靠左
+      </button>
+      <button @click="setTableAlign('center')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格置中">
+        置中
+      </button>
+      <button @click="setTableAlign('right')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠右">
+        靠右
+      </button>
+      <div class="w-px h-4 bg-gray-300 mx-1"></div>
+      <span class="text-xs text-gray-600">框線</span>
+      <select @change="setTableBorder($event.target.value)" class="text-xs border rounded px-1 py-1">
+        <option value="0">無</option>
+        <option value="1">1px</option>
+        <option value="2">2px</option>
+        <option value="3">3px</option>
+        <option value="4">4px</option>
+        <option value="5">5px</option>
+      </select>
+      <div class="w-px h-4 bg-gray-300 mx-1"></div>
+      <button @click="deleteTable" class="text-xs px-2 py-1 border rounded hover:bg-red-100 text-red-600" title="刪除表格">
+        刪除表格
+      </button>
+      <div class="w-px h-4 bg-gray-300 mx-1"></div>
+      <button @mousedown.prevent="selectTable" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="選取表格">
+        選取表格
+      </button>
+    </bubble-menu>
     
     <!-- Emoji Picker -->
     <div v-if="showEmojiPicker" class="absolute top-16 right-4 bg-white rounded-lg shadow-xl p-4 w-80 max-h-96 overflow-y-auto z-50 border">
@@ -1373,20 +1517,6 @@ onUnmounted(() => {
     </div>
     
     <!-- Table Modal -->
-    <div v-if="showTableModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-96">
-        <h3 class="text-lg font-bold mb-4">插入表格</h3>
-        <p class="text-sm text-gray-600 mb-4">將插入一個 3×3 的表格</p>
-        <div class="flex justify-end gap-2">
-          <button @click="showTableModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">
-            取消
-          </button>
-          <button @click="insertTable" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-            插入
-          </button>
-        </div>
-      </div>
-    </div>
     
     <!-- Link Modal -->
     <div v-if="showLinkModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1704,54 +1834,96 @@ ruby rt {
 
 /* Table Border Width */
 .ProseMirror table {
-  border: 1px solid #d1d5db;
-  border-style: solid;
+  border-collapse: collapse;
+  border: 1px solid #d1d5db !important;
 }
 
 .ProseMirror table td,
 .ProseMirror table th {
-  border: 1px solid #d1d5db;
-  border-style: solid;
+  border: 1px solid #d1d5db !important;
 }
 
-.ProseMirror table[data-border="1"],
+.ProseMirror table[data-border="0"] {
+  border-width: 0px !important;
+  border-style: none !important;
+}
+
+.ProseMirror table[data-border="0"] td,
+.ProseMirror table[data-border="0"] th { 
+  border-width: 0px !important;
+  border-style: none !important;
+}
+
+.ProseMirror table[data-border="1"] {
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
 .ProseMirror table[data-border="1"] td,
 .ProseMirror table[data-border="1"] th { 
-  border-width: 1px;
-  border-style: solid;
-  border-color: #d1d5db;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
 }
 
-.ProseMirror table[data-border="2"],
+.ProseMirror table[data-border="2"] {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
 .ProseMirror table[data-border="2"] td,
 .ProseMirror table[data-border="2"] th { 
-  border-width: 2px;
-  border-style: solid;
-  border-color: #d1d5db;
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
 }
 
-.ProseMirror table[data-border="3"],
+.ProseMirror table[data-border="3"] {
+  border-width: 3px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
 .ProseMirror table[data-border="3"] td,
 .ProseMirror table[data-border="3"] th { 
-  border-width: 3px;
-  border-style: solid;
-  border-color: #d1d5db;
+  border-width: 3px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
 }
 
-.ProseMirror table[data-border="4"],
+.ProseMirror table[data-border="4"] {
+  border-width: 4px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
 .ProseMirror table[data-border="4"] td,
 .ProseMirror table[data-border="4"] th { 
-  border-width: 4px;
-  border-style: solid;
-  border-color: #d1d5db;
+  border-width: 4px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
 }
 
-.ProseMirror table[data-border="5"],
+.ProseMirror table[data-border="5"] {
+  border-width: 5px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
 .ProseMirror table[data-border="5"] td,
 .ProseMirror table[data-border="5"] th { 
-  border-width: 5px;
-  border-style: solid;
-  border-color: #d1d5db;
+  border-width: 5px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.ProseMirror table.ProseMirror-selectednode {
+  outline: 3px solid #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+  position: relative;
+  z-index: 10;
 }
 
 /* Table input styling */
