@@ -153,10 +153,10 @@
         ruby {
             display: inline-flex !important;
             flex-direction: row !important;
-            align-items: flex-start !important;
+            align-items: center !important;
             vertical-align: baseline !important;
             margin: 0 0.15em !important;
-            line-height: 1 !important;
+            line-height: 1.8 !important;
         }
         ruby > span {
             line-height: 1 !important;
@@ -164,7 +164,7 @@
         ruby > rt,
         ruby rt {
             display: inline-block !important;
-            font-size: 0.35em !important;
+            font-size: 0.25em !important;
             writing-mode: vertical-rl !important;
             text-orientation: upright !important;
             margin-left: 0.15em !important;
@@ -172,11 +172,17 @@
             font-family: "Bopomofo", "Microsoft JhengHei", sans-serif !important;
             color: inherit !important;
             white-space: nowrap !important;
-            align-self: flex-start !important;
+            align-self: center !important;
         }
         .content table {
-            max-width: 100% !important;
-            width: auto !important;
+            max-width: 100%;
+            table-layout: fixed;
+            box-sizing: border-box;
+        }
+        
+        .content table td,
+        .content table th {
+            box-sizing: border-box;
         }
     </style>
     <script>
@@ -189,6 +195,53 @@
                 el.style.top = y + 'px';
             }
         });
+        
+        // 應用 colwidth 屬性到表格
+        setTimeout(function() {
+            var contentElement = document.querySelector('.content');
+            // 容器寬度 800px，padding 左右各 40px，所以可用寬度是 720px
+            // 但要預留一些空間給 border，所以實際使用 710px
+            var maxWidth = 710;
+            
+            document.querySelectorAll('.content table').forEach(function(table) {
+                var cells = table.querySelectorAll('td[colwidth], th[colwidth]');
+                
+                // 計算表格總寬度
+                var firstRow = table.querySelector('tr');
+                var totalWidth = 0;
+                if (firstRow) {
+                    var firstRowCells = firstRow.querySelectorAll('td[colwidth], th[colwidth]');
+                    firstRowCells.forEach(function(cell) {
+                        totalWidth += parseInt(cell.getAttribute('colwidth') || '0');
+                    });
+                }
+                
+                console.log('Table total width:', totalWidth, 'Max width:', maxWidth);
+                
+                // 檢查表格是否超過容器寬度
+                var scale = 1;
+                if (totalWidth > maxWidth) {
+                    scale = maxWidth / totalWidth;
+                    console.log('Scaling table by:', scale);
+                }
+                
+                // 應用縮放後的寬度
+                cells.forEach(function(cell) {
+                    var width = cell.getAttribute('colwidth');
+                    if (width) {
+                        var scaledWidth = parseInt(width) * scale;
+                        cell.style.width = scaledWidth + 'px';
+                        console.log('Cell width:', width, '-> scaled:', scaledWidth);
+                    }
+                });
+                
+                if (totalWidth > 0) {
+                    var scaledTableWidth = totalWidth * scale;
+                    table.style.width = scaledTableWidth + 'px';
+                    console.log('Table width set to:', scaledTableWidth);
+                }
+            });
+        }, 100);
         
         // 將表格中的占位符替換為 input 標籤
         document.querySelectorAll('.content table').forEach(function(table) {

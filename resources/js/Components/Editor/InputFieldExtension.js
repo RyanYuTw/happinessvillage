@@ -37,13 +37,12 @@ export default Node.create({
         priority: 100,
         getAttrs: element => {
           // 檢查是否在表格內
-          if (element.closest('table')) {
-            return false // 不解析表格內的輸入框
-          }
+          const isInTable = element.closest('table') !== null
+          
           return {
             value: element.getAttribute('data-value') || '',
-            x: parseInt(element.getAttribute('data-x')) || 100,
-            y: parseInt(element.getAttribute('data-y')) || 100,
+            x: isInTable ? 0 : (parseInt(element.getAttribute('data-x')) || 100),
+            y: isInTable ? 0 : (parseInt(element.getAttribute('data-y')) || 100),
           }
         },
       },

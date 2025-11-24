@@ -8,7 +8,10 @@ const props = defineProps({
 })
 
 const isInTable = computed(() => {
-  return props.editor.isActive('tableCell') || props.editor.isActive('tableHeader')
+  // 如果 x 和 y 都是 0，表示在表格內
+  return (props.node.attrs.x === 0 && props.node.attrs.y === 0) || 
+         props.editor.isActive('tableCell') || 
+         props.editor.isActive('tableHeader')
 })
 
 const deleteNode = () => {

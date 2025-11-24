@@ -36,7 +36,7 @@
                 
                 <div class="border-t pt-6">
                     <h3 class="text-base font-medium text-gray-900 mb-4">內容</h3>
-                    <div class="prose max-w-none" v-html="decodedContent"></div>
+                    <div ref="contentContainer" class="handbook-content prose max-w-none" v-html="decodedContent" @vue:updated="applyTableWidths"></div>
                 </div>
                 
                 <div class="mt-6 flex gap-2">
@@ -55,19 +55,188 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link } from '@inertiajs/vue3'
-import { computed } from 'vue'
+import { computed, onMounted, nextTick, ref } from 'vue'
 
 const props = defineProps({
     handbook: Object
 })
 
+const contentContainer = ref(null)
+
 const decodedContent = computed(() => {
     if (!props.handbook.content) return '無內容'
-    console.log('Raw content:', props.handbook.content.substring(0, 100))
     const txt = document.createElement('textarea')
     txt.innerHTML = props.handbook.content
-    const decoded = txt.value
-    console.log('Decoded content:', decoded.substring(0, 100))
-    return decoded
+    return txt.value
+})
+
+const applyTableWidths = () => {
+    setTimeout(() => {
+        const tables = document.querySelectorAll('.handbook-content table')
+        tables.forEach(table => {
+            const cells = table.querySelectorAll('td[colwidth], th[colwidth]')
+            cells.forEach(cell => {
+                const width = cell.getAttribute('colwidth')
+                if (width) {
+                    cell.style.width = width + 'px'
+                }
+            })
+            
+            // 計算表格總寬度
+            const firstRow = table.querySelector('tr')
+            if (firstRow) {
+                let totalWidth = 0
+                const firstRowCells = firstRow.querySelectorAll('td[colwidth], th[colwidth]')
+                firstRowCells.forEach(cell => {
+                    totalWidth += parseInt(cell.getAttribute('colwidth') || '0')
+                })
+                if (totalWidth > 0) {
+                    table.style.width = totalWidth + 'px'
+                }
+            }
+        })
+    }, 100)
+}
+
+onMounted(() => {
+    applyTableWidths()
 })
 </script>
+
+<style scoped>
+/* Table Alignment */
+.handbook-content table {
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.handbook-content table colgroup col {
+  max-width: 100%;
+}
+
+.handbook-content table[data-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.handbook-content table[data-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.handbook-content table[data-align="left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Table Border Width */
+.handbook-content table {
+  border: 1px solid #d1d5db !important;
+}
+
+.handbook-content table td,
+.handbook-content table th {
+  border: 1px solid #d1d5db !important;
+  padding: 0.5rem;
+}
+
+.handbook-content table[data-border="0"] {
+  border-width: 0px !important;
+  border-style: none !important;
+}
+
+.handbook-content table[data-border="0"] td,
+.handbook-content table[data-border="0"] th { 
+  border-width: 0px !important;
+  border-style: none !important;
+}
+
+.handbook-content table[data-border="1"] {
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="1"] td,
+.handbook-content table[data-border="1"] th { 
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="2"] {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="2"] td,
+.handbook-content table[data-border="2"] th { 
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="3"] {
+  border-width: 3px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="3"] td,
+.handbook-content table[data-border="3"] th { 
+  border-width: 3px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="4"] {
+  border-width: 4px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="4"] td,
+.handbook-content table[data-border="4"] th { 
+  border-width: 4px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="5"] {
+  border-width: 5px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+.handbook-content table[data-border="5"] td,
+.handbook-content table[data-border="5"] th { 
+  border-width: 5px !important;
+  border-style: solid !important;
+  border-color: #d1d5db !important;
+}
+
+/* Ruby (注音) styling */
+.handbook-content ruby {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  vertical-align: baseline !important;
+  margin: 0 0.15em !important;
+  line-height: 1.8 !important;
+}
+
+.handbook-content ruby > rt,
+.handbook-content ruby rt {
+  display: inline-block !important;
+  font-size: 0.5em !important;
+  writing-mode: vertical-rl !important;
+  text-orientation: upright !important;
+  margin-left: 0.15em !important;
+  line-height: 1 !important;
+  font-family: Bopomofo, Microsoft JhengHei, sans-serif !important;
+  color: inherit !important;
+  white-space: nowrap !important;
+}
+</style>
