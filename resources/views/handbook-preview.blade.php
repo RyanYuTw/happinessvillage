@@ -159,20 +159,28 @@
             line-height: 1.8 !important;
         }
         ruby > span {
-            line-height: 1 !important;
+            line-height: 1.8 !important;
+            display: inline-block !important;
         }
         ruby > rt,
         ruby rt {
-            display: inline-block !important;
-            font-size: 0.25em !important;
+            display: inline-flex !important;
+            font-size: 0.20em !important;
             writing-mode: vertical-rl !important;
             text-orientation: upright !important;
             margin-left: 0.15em !important;
-            line-height: 1 !important;
+            line-height: 1.2 !important;
             font-family: "Bopomofo", "Microsoft JhengHei", sans-serif !important;
             color: inherit !important;
             white-space: nowrap !important;
             align-self: center !important;
+            justify-content: center !important;
+        }
+        /* 3個或以上注音符號使用較小字體和較緊密的行高 */
+        ruby > rt[data-long="true"],
+        ruby rt[data-long="true"] {
+            font-size: 0.17em !important;
+            line-height: 1.1 !important;
         }
         .content table {
             max-width: 100%;
@@ -252,28 +260,51 @@
             }
         });
         
+        
         // 處理注音聲調位置
         document.querySelectorAll('ruby rt').forEach(function(rt) {
+            // 移除 zoom 樣式
+            rt.style.zoom = '';
+            
             const text = rt.textContent;
             const toneMatch = text.match(/[ˊˇˋ˙]/);
+            const baseText = text.replace(/[ˊˇˋ˙]/g, '');
+            
+            // 檢查是否有3個或以上注音符號
+            const isLong = baseText.length >= 3;
+            
+            // 先設置字體大小（使用 px 單位避免相對計算）
+            if (isLong) {
+                rt.setAttribute('data-long', 'true');
+                rt.style.setProperty('font-size', '5.5px', 'important');
+            } else {
+                rt.style.setProperty('font-size', '6px', 'important');
+            }
+            
             if (toneMatch) {
                 const tone = toneMatch[0];
-                const baseText = text.replace(/[ˊˇˋ˙]/g, '');
                 const tonePos = text.indexOf(tone);
                 
                 if (tone === '˙') {
                     // 輕聲在第一個注音符號上方
                     rt.innerHTML = '<span style="position: relative;">' + 
-                        '<span style="position: absolute; top: -0.35em; left: 0.05em; font-size: 0.9em;">' + tone + '</span>' + 
+                        '<span style="position: absolute; top: -0.4em; left: 0.1em; font-size: 0.9em;">' + tone + '</span>' + 
                         baseText + 
                         '</span>';
                 } else {
                     // 2,3,4聲在注音符號右側中間偏下
                     rt.innerHTML = '<span style="position: relative; display: inline-block;">' + 
                         baseText + 
-                        '<span style="position: absolute; right: -0.55em; top: 35%; font-size: 1em;">' + tone + '</span>' + 
+                        '<span style="position: absolute; right: -1em; top: 35%; font-size: 1em;">' + tone + '</span>' + 
                         '</span>';
                 }
+            }
+            
+            // 處理完 innerHTML 後再次設置字體大小，確保生效（使用 px 單位）
+            if (isLong) {
+                rt.style.setProperty('font-size', '5.5px', 'important');
+            } else {
+                rt.style.setProperty('font-size', '6px', 'important');
             }
         });
     });
