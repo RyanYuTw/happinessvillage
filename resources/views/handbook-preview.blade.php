@@ -101,6 +101,13 @@
             border-style: solid !important;
             border-color: #d1d5db !important;
         }
+        .content table[data-border="0"],
+        .content table[data-border="0"] td,
+        .content table[data-border="0"] th { 
+            border-width: 0px !important;
+            border-style: none !important;
+            border-color: transparent !important;
+        }
         .content table[data-border="2"],
         .content table[data-border="2"] td,
         .content table[data-border="2"] th { 
