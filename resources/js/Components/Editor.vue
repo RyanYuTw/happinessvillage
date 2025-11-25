@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
-import { BubbleMenu } from '@tiptap/vue-3/menus'
+
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -105,6 +105,7 @@ const htmlContent = ref('')
 const isRealTimeZhuyin = ref(false)
 const isComposing = ref(false)
 const isTableSelected = ref(false)
+const currentTableBorder = ref('1')
 let typingTimer = null
 let lastConvertedPosition = -1
 let isConverting = ref(false)
@@ -131,14 +132,16 @@ const editor = useEditor({
       
       state.doc.descendants((node, pos) => {
         if (node.type.name === 'table') {
-          const hasAlign = node.attrs['data-align'] !== undefined && node.attrs['data-align'] !== null && node.attrs['data-align'] !== ''
-          const hasBorder = node.attrs['data-border'] !== undefined && node.attrs['data-border'] !== null && node.attrs['data-border'] !== ''
+          // 檢查每個屬性是否缺失
+          const alignMissing = node.attrs['data-align'] === null || node.attrs['data-align'] === undefined
+          const borderMissing = node.attrs['data-border'] === null || node.attrs['data-border'] === undefined
           
-          if (!hasAlign || !hasBorder) {
+          // 只在有屬性缺失時才更新
+          if (alignMissing || borderMissing) {
             tr = tr.setNodeMarkup(pos, null, {
               ...node.attrs,
-              'data-align': node.attrs['data-align'] || 'left',
-              'data-border': node.attrs['data-border'] || '1'
+              'data-align': alignMissing ? 'left' : node.attrs['data-align'],
+              'data-border': borderMissing ? '1' : node.attrs['data-border']
             })
             modified = true
           }
@@ -248,28 +251,33 @@ const editor = useEditor({
           ...this.parent?.(),
           'data-align': {
             default: 'left',
-            parseHTML: element => element.getAttribute('data-align') || 'left',
+            parseHTML: element => element.getAttribute('data-align') ?? 'left',
             renderHTML: attributes => {
-              return { 'data-align': attributes['data-align'] || 'left' }
+              return { 'data-align': attributes['data-align'] ?? 'left' }
             },
           },
           'data-border': {
             default: '1',
-            parseHTML: element => element.getAttribute('data-border') || '1',
+            parseHTML: element => {
+              const value = element.getAttribute('data-border')
+              return value !== null ? value : '1'
+            },
             renderHTML: attributes => {
-              return { 'data-border': attributes['data-border'] || '1' }
+              const value = attributes['data-border']
+              return { 'data-border': value !== null && value !== undefined ? value : '1' }
             },
           },
         }
       },
       renderHTML({ node, HTMLAttributes }) {
+        const attrs = {
+          ...HTMLAttributes,
+          'data-align': node.attrs['data-align'] ?? 'left',
+          'data-border': node.attrs['data-border'] ?? '1',
+        }
         return [
           'table',
-          {
-            ...HTMLAttributes,
-            'data-align': node.attrs['data-align'] || 'left',
-            'data-border': node.attrs['data-border'] || '1',
-          },
+          attrs,
           ['tbody', 0]
         ]
       },
@@ -315,6 +323,29 @@ const editor = useEditor({
   onUpdate: ({ editor, transaction }) => {
     emit('update:modelValue', editor.getHTML())
     
+    // 同步表格屬性到 DOM（不干擾調整大小功能）
+    if (editor.view) {
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'table') {
+          const dom = editor.view.domAtPos(pos + 1)
+          if (dom.node && dom.node.nodeType === 1) {
+            const tableElement = dom.node.closest('table')
+            if (tableElement) {
+              const borderValue = node.attrs['data-border'] ?? '1'
+              const alignValue = node.attrs['data-align'] ?? 'left'
+              
+              if (tableElement.getAttribute('data-border') !== borderValue) {
+                tableElement.setAttribute('data-border', borderValue)
+              }
+              if (tableElement.getAttribute('data-align') !== alignValue) {
+                tableElement.setAttribute('data-align', alignValue)
+              }
+            }
+          }
+        }
+      })
+    }
+    
     // 更新字體大小選單
     const { from } = editor.state.selection
     const marks = editor.state.doc.resolve(from).marks()
@@ -346,8 +377,37 @@ const editor = useEditor({
       fontFamily.value = 'Arial'
     }
     
-    // Check if table is selected
+    // Check if table is selected and update border value
     isTableSelected.value = editor.isActive('table') || editor.state.selection.node?.type.name === 'table'
+    
+    // Update current table border value
+    if (isTableSelected.value) {
+      const { state } = editor
+      const { selection } = state
+      const { $from } = selection
+      let tablePos = null
+      
+      // Check if NodeSelection with table
+      if (selection instanceof NodeSelection && selection.node.type.name === 'table') {
+        tablePos = selection.from
+      } else {
+        // Find table from current position
+        for (let d = $from.depth; d > 0; d--) {
+          const node = $from.node(d)
+          if (node.type.name === 'table') {
+            tablePos = $from.before(d)
+            break
+          }
+        }
+      }
+      
+      if (tablePos !== null) {
+        const tableNode = state.doc.nodeAt(tablePos)
+        if (tableNode && tableNode.attrs['data-border'] !== null && tableNode.attrs['data-border'] !== undefined) {
+          currentTableBorder.value = tableNode.attrs['data-border']
+        }
+      }
+    }
   },
   editorProps: {
     transformPastedHTML(html) {
@@ -693,7 +753,35 @@ const selectTable = () => {
 
 const setTableAlign = (align) => {
   if (!editor.value) return
-  editor.value.chain().focus().setTextAlign(align).run()
+  const { state, view } = editor.value
+  const { selection } = state
+  const { $from } = selection
+  let tablePos = null
+  
+  // 先檢查是否是 NodeSelection 且選中的是表格
+  if (selection instanceof NodeSelection && selection.node.type.name === 'table') {
+    tablePos = selection.from
+  } else {
+    // 從當前位置往上找表格
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d)
+      if (node.type.name === 'table') {
+        tablePos = $from.before(d)
+        break
+      }
+    }
+  }
+  
+  if (tablePos !== null) {
+    const tableNode = state.doc.nodeAt(tablePos)
+    if (tableNode) {
+      const tr = state.tr.setNodeMarkup(tablePos, null, {
+        ...tableNode.attrs,
+        'data-align': align
+      })
+      view.dispatch(tr)
+    }
+  }
 }
 
 const setTableBorder = (width) => {
@@ -725,8 +813,6 @@ const setTableBorder = (width) => {
         'data-border': width
       })
       view.dispatch(tr)
-      // 強制重新渲染
-      view.updateState(view.state)
     }
   }
 }
@@ -1438,63 +1524,67 @@ onUnmounted(() => {
       </div>
       
       <!-- 表格控制 (在表格內時顯示) -->
+      <div v-if="editor && (editor.isActive('table') || isTableSelected)" class="flex items-center gap-1 ml-2 px-2 border-l border-gray-300 flex-wrap">
+        <button @click="addTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增列">
+          +列
+        </button>
+        <button @click="deleteTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除列">
+          -列
+        </button>
+        <button @click="addTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增欄">
+          +欄
+        </button>
+        <button @click="deleteTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除欄">
+          -欄
+        </button>
+        <button @click="mergeCells" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="合併儲存格">
+          合併
+        </button>
+        <button @click="splitCell" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="分割儲存格">
+          分割
+        </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <span class="text-xs text-gray-600">表格</span>
+        <button @click="setTableAlign('left')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠左">
+          靠左
+        </button>
+        <button @click="setTableAlign('center')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格置中">
+          置中
+        </button>
+        <button @click="setTableAlign('right')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠右">
+          靠右
+        </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <span class="text-xs text-gray-600">儲存格</span>
+        <button @click="editor.chain().focus().setTextAlign('left').run()" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="儲存格靠左">
+          靠左
+        </button>
+        <button @click="editor.chain().focus().setTextAlign('center').run()" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="儲存格置中">
+          置中
+        </button>
+        <button @click="editor.chain().focus().setTextAlign('right').run()" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="儲存格靠右">
+          靠右
+        </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <span class="text-xs text-gray-600">框線</span>
+        <select v-model="currentTableBorder" @change="setTableBorder(currentTableBorder)" class="text-xs border rounded px-1 py-1 bg-white">
+          <option value="0">無</option>
+          <option value="1">1px</option>
+          <option value="2">2px</option>
+          <option value="3">3px</option>
+          <option value="4">4px</option>
+          <option value="5">5px</option>
+        </select>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <button @click="deleteTable" class="text-xs px-2 py-1 border rounded hover:bg-red-100 text-red-600" title="刪除表格">
+          刪除表格
+        </button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <button @mousedown.prevent="selectTable" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="選取表格">
+          選取表格
+        </button>
+      </div>
     </div>
-    
-    <!-- Table Bubble Menu -->
-    <bubble-menu
-      v-if="editor"
-      :editor="editor"
-      :tippy-options="{ duration: 100, placement: 'top' }"
-      :should-show="({ editor }) => editor.isActive('table') || isTableSelected"
-      class="flex items-center gap-1 p-1 bg-white border rounded shadow-lg"
-    >
-      <button @click="addTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增列">
-        +列
-      </button>
-      <button @click="deleteTableRow" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除列">
-        -列
-      </button>
-      <button @click="addTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="新增欄">
-        +欄
-      </button>
-      <button @click="deleteTableColumn" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="刪除欄">
-        -欄
-      </button>
-      <button @click="mergeCells" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="合併儲存格">
-        合併
-      </button>
-      <button @click="splitCell" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="分割儲存格">
-        分割
-      </button>
-      <div class="w-px h-4 bg-gray-300 mx-1"></div>
-      <button @click="setTableAlign('left')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠左">
-        靠左
-      </button>
-      <button @click="setTableAlign('center')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格置中">
-        置中
-      </button>
-      <button @click="setTableAlign('right')" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="表格靠右">
-        靠右
-      </button>
-      <div class="w-px h-4 bg-gray-300 mx-1"></div>
-      <span class="text-xs text-gray-600">框線</span>
-      <select @change="setTableBorder($event.target.value)" class="text-xs border rounded px-1 py-1">
-        <option value="0">無</option>
-        <option value="1">1px</option>
-        <option value="2">2px</option>
-        <option value="3">3px</option>
-        <option value="4">4px</option>
-        <option value="5">5px</option>
-      </select>
-      <div class="w-px h-4 bg-gray-300 mx-1"></div>
-      <button @click="deleteTable" class="text-xs px-2 py-1 border rounded hover:bg-red-100 text-red-600" title="刪除表格">
-        刪除表格
-      </button>
-      <div class="w-px h-4 bg-gray-300 mx-1"></div>
-      <button @mousedown.prevent="selectTable" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="選取表格">
-        選取表格
-      </button>
-    </bubble-menu>
     
     <!-- Emoji Picker -->
     <div v-if="showEmojiPicker" class="absolute top-16 right-4 bg-white rounded-lg shadow-xl p-4 w-80 max-h-96 overflow-y-auto z-50 border">
@@ -1796,14 +1886,33 @@ ruby rt {
   position: absolute;
   right: -2px;
   top: 0;
-  bottom: 0;
+  bottom: -1px;
   width: 4px;
   background-color: #3b82f6;
+  cursor: col-resize;
+  z-index: 20;
+}
+
+.ProseMirror .selectedCell:after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(200, 200, 255, 0.4);
   pointer-events: none;
 }
 
 .ProseMirror.resize-cursor {
   cursor: col-resize;
+}
+
+/* Make table cells have visible borders for easier resizing */
+.ProseMirror table td,
+.ProseMirror table th {
+  position: relative;
 }
 
 /* Table Alignment */
@@ -1843,15 +1952,22 @@ ruby rt {
   border: 1px solid #d1d5db !important;
 }
 
-.ProseMirror table[data-border="0"] {
+.ProseMirror table[data-border="0"],
+.ProseMirror table[data-border="0"].ProseMirror-selectednode {
+  border: none !important;
   border-width: 0px !important;
   border-style: none !important;
+  border-color: transparent !important;
 }
 
 .ProseMirror table[data-border="0"] td,
-.ProseMirror table[data-border="0"] th { 
+.ProseMirror table[data-border="0"] th,
+.ProseMirror table[data-border="0"].ProseMirror-selectednode td,
+.ProseMirror table[data-border="0"].ProseMirror-selectednode th { 
+  border: none !important;
   border-width: 0px !important;
   border-style: none !important;
+  border-color: transparent !important;
 }
 
 .ProseMirror table[data-border="1"] {
