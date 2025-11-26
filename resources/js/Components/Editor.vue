@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { showAlert, showError } from '../utils/sweetalert'
 
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
@@ -11,6 +12,7 @@ import InputFieldExtension from './Editor/InputFieldExtension'
 import DrawingExtension from './Editor/DrawingExtension'
 import ChartExtension from './Editor/ChartExtension'
 import ZhuyinExtension from './Editor/ZhuyinExtension'
+import ButtonExtension from './Editor/ButtonExtension'
 import ZhuyinSelector from './Editor/ZhuyinSelector.vue'
 import FontAwesomeExtension from './Editor/FontAwesomeExtension'
 import Link from '@tiptap/extension-link'
@@ -21,6 +23,7 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
+import TableRowResize from './Editor/TableRowResizeExtension'
 import { Color } from '@tiptap/extension-color'
 import { Highlight } from '@tiptap/extension-highlight'
 import { FontFamily } from '@tiptap/extension-font-family'
@@ -43,7 +46,7 @@ import {
   Indent as IndentIcon, Outdent as OutdentIcon, Underline as UnderlineIcon,
   Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, FileCode, Zap,
-  Quote, ListTodo, Smile
+  Quote, ListTodo, Smile, RectangleHorizontal, Upload, Image as ImageIcon
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -87,6 +90,21 @@ const imageTags = ref('')
 const imageFilename = ref('')
 const selectedImageFile = ref(null)
 const imageAlign = ref('left')
+const showButtonModal = ref(false)
+const buttonText = ref('按鈕')
+const buttonUrl = ref('')
+const buttonType = ref('link') // 'link' or 'drawing'
+const buttonAlign = ref('center') // 'left', 'center', 'right'
+const buttonColor = ref('#fef08a') // yellow-200
+const buttonTextColor = ref('#854d0e') // yellow-900
+const buttonBackgroundImage = ref(null)
+const buttonDrawingBackgroundImage = ref(null)
+const showButtonImageSelector = ref(false)
+const showDrawingImageSelector = ref(false)
+const buttonAvailableImages = ref([])
+const drawingAvailableImages = ref([])
+const buttonImageSearchQuery = ref('')
+const drawingImageSearchQuery = ref('')
 
 const emojis = [
   '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗',
@@ -124,33 +142,62 @@ const editor = useEditor({
       editor.view.dom.addEventListener('mousedown', handleImageMouseDown)
     }
     
-    // 為現有的表格添加預設屬性
+    // 為現有的表格添加預設屬性並同步到 DOM
     setTimeout(() => {
-      const { state } = editor
+      const { state, view } = editor
       let tr = state.tr
       let modified = false
       
       state.doc.descendants((node, pos) => {
         if (node.type.name === 'table') {
-          // 檢查每個屬性是否缺失
-          const alignMissing = node.attrs['data-align'] === null || node.attrs['data-align'] === undefined
-          const borderMissing = node.attrs['data-border'] === null || node.attrs['data-border'] === undefined
+          // 檢查每個屬性是否缺失（注意：'0' 是有效值，不能用 ! 或 || 運算符）
+          const currentAlign = node.attrs['data-align']
+          const currentBorder = node.attrs['data-border']
           
-          // 只在有屬性缺失時才更新
+          const alignMissing = currentAlign === null || currentAlign === undefined || currentAlign === ''
+          const borderMissing = currentBorder === null || currentBorder === undefined
+          
+          // 只在有屬性真正缺失時才更新
           if (alignMissing || borderMissing) {
-            tr = tr.setNodeMarkup(pos, null, {
-              ...node.attrs,
-              'data-align': alignMissing ? 'left' : node.attrs['data-align'],
-              'data-border': borderMissing ? '1' : node.attrs['data-border']
-            })
+            const newAttrs = { ...node.attrs }
+            if (alignMissing) {
+              newAttrs['data-align'] = 'left'
+            }
+            if (borderMissing) {
+              newAttrs['data-border'] = '1'
+            }
+            tr = tr.setNodeMarkup(pos, null, newAttrs)
             modified = true
           }
         }
       })
       
       if (modified) {
-        editor.view.dispatch(tr)
+        view.dispatch(tr)
       }
+      
+      // 同步所有表格屬性到 DOM
+      setTimeout(() => {
+        editor.state.doc.descendants((node, pos) => {
+          if (node.type.name === 'table') {
+            const dom = view.domAtPos(pos + 1)
+            if (dom.node && dom.node.nodeType === 1) {
+              const tableElement = dom.node.closest('table')
+              if (tableElement) {
+                const borderValue = node.attrs['data-border'] !== null && node.attrs['data-border'] !== undefined 
+                  ? String(node.attrs['data-border']) 
+                  : '1'
+                const alignValue = node.attrs['data-align'] !== null && node.attrs['data-align'] !== undefined 
+                  ? String(node.attrs['data-align']) 
+                  : 'left'
+                
+                tableElement.setAttribute('data-border', borderValue)
+                tableElement.setAttribute('data-align', alignValue)
+              }
+            }
+          }
+        })
+      }, 50)
     }, 100)
   },
   extensions: [
@@ -201,6 +248,7 @@ const editor = useEditor({
     ChartExtension,
     ZhuyinExtension,
     FontAwesomeExtension,
+    ButtonExtension,
     TextStyle,
     FontSize,
     Image.extend({
@@ -212,21 +260,88 @@ const editor = useEditor({
           style: { default: null },
           'data-border-width': { default: null },
           'data-border-color': { default: null },
+          'data-border-style': { default: null },
           'data-align': { default: 'left' },
+          'data-in-table': { default: null },
+          'data-from-drawing': { default: null },
         }
       },
-      renderHTML({ HTMLAttributes }) {
+      renderHTML({ HTMLAttributes, node }) {
         const align = HTMLAttributes['data-align'] || 'left'
         let alignClass = ''
         if (align === 'center') alignClass = 'mx-auto block'
         else if (align === 'right') alignClass = 'ml-auto block'
         else alignClass = 'mr-auto block'
         
+        // 檢查是否在表格內
+        const inTable = HTMLAttributes['data-in-table']
+        if (inTable) {
+          alignClass += ' table-image'
+        }
+        
+        // 處理框線樣式
+        let borderStyle = ''
+        const borderWidth = HTMLAttributes['data-border-width']
+        const borderColor = HTMLAttributes['data-border-color']
+        const borderStyleType = HTMLAttributes['data-border-style'] || 'solid'
+        
+        if (borderWidth && borderWidth > 0) {
+          borderStyle = `border: ${borderWidth}px ${borderStyleType} ${borderColor || '#000000'};`
+        }
+        
+        // 組合樣式
+        const existingStyle = HTMLAttributes.style || ''
+        const combinedStyle = `max-width: 100%; height: auto; ${borderStyle} ${existingStyle}`.trim()
+        
         return ['img', {
           ...HTMLAttributes,
-          class: alignClass
+          class: alignClass,
+          style: combinedStyle
         }]
       },
+      addProseMirrorPlugins() {
+        return [
+          new Plugin({
+            key: new PluginKey('imageInTable'),
+            appendTransaction: (transactions, oldState, newState) => {
+              const tr = newState.tr
+              let modified = false
+              
+              newState.doc.descendants((node, pos) => {
+                if (node.type.name === 'image') {
+                  // 檢查圖片是否在表格內
+                  const $pos = newState.doc.resolve(pos)
+                  let inTable = false
+                  
+                  for (let d = $pos.depth; d > 0; d--) {
+                    if ($pos.node(d).type.name === 'table') {
+                      inTable = true
+                      break
+                    }
+                  }
+                  
+                  // 如果狀態改變，更新屬性
+                  if (inTable && !node.attrs['data-in-table']) {
+                    tr.setNodeMarkup(pos, null, {
+                      ...node.attrs,
+                      'data-in-table': 'true'
+                    })
+                    modified = true
+                  } else if (!inTable && node.attrs['data-in-table']) {
+                    tr.setNodeMarkup(pos, null, {
+                      ...node.attrs,
+                      'data-in-table': null
+                    })
+                    modified = true
+                  }
+                }
+              })
+              
+              return modified ? tr : null
+            }
+          })
+        ]
+      }
     }).configure({
       inline: false,
       allowBase64: true,
@@ -259,33 +374,55 @@ const editor = useEditor({
           'data-border': {
             default: '1',
             parseHTML: element => {
+              // 明確檢查屬性是否存在，避免使用 || 運算符
               const value = element.getAttribute('data-border')
-              return value !== null ? value : '1'
+              // 如果值存在（包括 '0'），返回它；否則返回 null 讓 default 生效
+              return value !== null ? value : null
             },
             renderHTML: attributes => {
               const value = attributes['data-border']
-              return { 'data-border': value !== null && value !== undefined ? value : '1' }
+              // 明確檢查，避免使用 || 運算符把 '0' 當作 falsy
+              if (value !== null && value !== undefined) {
+                return { 'data-border': String(value) }
+              }
+              return { 'data-border': '1' }
             },
           },
         }
       },
-      renderHTML({ node, HTMLAttributes }) {
-        const attrs = {
-          ...HTMLAttributes,
-          'data-align': node.attrs['data-align'] ?? 'left',
-          'data-border': node.attrs['data-border'] ?? '1',
-        }
+      renderHTML({ HTMLAttributes }) {
+        // HTMLAttributes 已經包含了從 addAttributes 的 renderHTML 返回的屬性
+        // 直接使用它們，不需要手動設置
         return [
           'table',
-          attrs,
+          HTMLAttributes,
           ['tbody', 0]
         ]
       },
+      addProseMirrorPlugins() {
+        return [
+          ...(this.parent?.() || []),
+          new Plugin({
+            key: new PluginKey('tableClickHandler'),
+            props: {
+              handleClickOn(view, pos, node, nodePos, event) {
+                // 如果點擊的是表格，選取整個表格
+                if (node.type.name === 'table' && event.ctrlKey) {
+                  const tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos))
+                  view.dispatch(tr)
+                  return true
+                }
+                return false
+              }
+            }
+          })
+        ]
+      }
     }).configure({
       resizable: true,
       allowTableNodeSelection: true,
     }),
-    TableRow,
+    TableRowResize,
     TableHeader.configure({
       HTMLAttributes: {
         class: 'bg-gray-100 font-bold p-2',
@@ -331,8 +468,13 @@ const editor = useEditor({
           if (dom.node && dom.node.nodeType === 1) {
             const tableElement = dom.node.closest('table')
             if (tableElement) {
-              const borderValue = node.attrs['data-border'] ?? '1'
-              const alignValue = node.attrs['data-align'] ?? 'left'
+              // 確保正確處理 '0' 值，避免使用 || 運算符
+              const borderValue = node.attrs['data-border'] !== null && node.attrs['data-border'] !== undefined 
+                ? String(node.attrs['data-border']) 
+                : '1'
+              const alignValue = node.attrs['data-align'] !== null && node.attrs['data-align'] !== undefined 
+                ? String(node.attrs['data-align']) 
+                : 'left'
               
               if (tableElement.getAttribute('data-border') !== borderValue) {
                 tableElement.setAttribute('data-border', borderValue)
@@ -520,7 +662,7 @@ const addZhuyin = async () => {
     }
   } catch (error) {
     console.error('Error fetching Zhuyin:', error)
-    alert('注音轉換失敗，請稍後再試。')
+    showError('注音轉換失敗，請稍後再試。')
   }
 }
 
@@ -719,35 +861,57 @@ const deleteTable = () => {
 
 const selectTable = () => {
   if (!editor.value) return
-  const { state, dispatch } = editor.value.view
+  
+  const { state, view } = editor.value
   const { selection } = state
   const { $from } = selection
   
-  // Find the table node position
+  // 清除所有舊的手動選取樣式
+  document.querySelectorAll('.table-selected-manual').forEach(el => {
+    el.classList.remove('table-selected-manual')
+  })
+  
+  // 尋找表格節點位置
   let tablePos = -1
+  let tableNode = null
+  
   for (let d = $from.depth; d > 0; d--) {
     const node = $from.node(d)
     if (node.type.name === 'table') {
       tablePos = $from.before(d)
+      tableNode = node
       break
     }
   }
   
-  if (tablePos > -1) {
-    // Use setTimeout to ensure the event loop has cleared any click events
-    setTimeout(() => {
-      try {
-        if (!editor.value || !editor.value.view) return
-        
-        const { state, dispatch } = editor.value.view
-        const tr = state.tr.setSelection(NodeSelection.create(state.doc, tablePos))
-        tr.scrollIntoView()
-        dispatch(tr)
-        editor.value.view.focus()
-      } catch (e) {
-        console.error('Error setting NodeSelection:', e)
-      }
-    }, 50)
+  if (tablePos > -1 && tableNode) {
+    try {
+      // 創建 NodeSelection
+      const tr = state.tr.setSelection(NodeSelection.create(state.doc, tablePos))
+      view.dispatch(tr)
+      view.focus()
+      
+      // 手動添加視覺樣式（因為 ProseMirror 不會自動添加 CSS 類別）
+      setTimeout(() => {
+        try {
+          const dom = view.domAtPos(tablePos + 1)
+          if (dom.node) {
+            const tableElement = dom.node.nodeType === 1 ? dom.node.closest('table') : dom.node.parentElement?.closest('table')
+            if (tableElement) {
+              tableElement.classList.add('table-selected-manual')
+            }
+          }
+        } catch (e) {
+          console.error('添加視覺樣式失敗:', e)
+        }
+      }, 10)
+      
+    } catch (e) {
+      console.error('選取表格失敗:', e)
+      alert('無法選取表格')
+    }
+  } else {
+    alert('請先將游標放在表格內')
   }
 }
 
@@ -780,7 +944,31 @@ const setTableAlign = (align) => {
         'data-align': align
       })
       view.dispatch(tr)
+      
+      // 更新後重新選取表格並保持視覺樣式
+      setTimeout(() => {
+        const newTr = editor.value.state.tr.setSelection(NodeSelection.create(editor.value.state.doc, tablePos))
+        editor.value.view.dispatch(newTr)
+        editor.value.view.focus()
+        
+        // 重新添加視覺樣式
+        setTimeout(() => {
+          try {
+            const dom = view.domAtPos(tablePos + 1)
+            if (dom.node) {
+              const tableElement = dom.node.nodeType === 1 ? dom.node.closest('table') : dom.node.parentElement?.closest('table')
+              if (tableElement) {
+                tableElement.classList.add('table-selected-manual')
+              }
+            }
+          } catch (e) {
+            console.error('重新添加視覺樣式失敗:', e)
+          }
+        }, 10)
+      }, 50)
     }
+  } else {
+    alert('請先選取表格（點擊「選取表格」按鈕）')
   }
 }
 
@@ -918,12 +1106,12 @@ const saveHtmlContent = () => {
 
 const insertIcon = () => {
   if (!editor.value) {
-    alert('編輯器尚未就緒')
+    showAlert('編輯器尚未就緒')
     return
   }
   
   if (!iconClass.value.trim()) {
-    alert('請輸入圖示類別')
+    showAlert('請輸入圖示類別')
     return
   }
   
@@ -941,7 +1129,7 @@ const insertIcon = () => {
     iconClass.value = ''
   } catch (error) {
     console.error('插入圖示失敗:', error)
-    alert('插入圖示失敗，請稍後再試')
+    showError('插入圖示失敗，請稍後再試')
   }
 }
 
@@ -951,20 +1139,6 @@ const insertEmoji = (emoji) => {
   showEmojiPicker.value = false
 }
 
-const uploadImage = () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.onchange = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      selectedImageFile.value = file
-      imageFilename.value = file.name
-      showImageUploadModal.value = true
-    }
-  }
-  input.click()
-}
 
 const confirmImageUpload = async () => {
   if (!editor.value || !selectedImageFile.value) return
@@ -1001,8 +1175,145 @@ const confirmImageUpload = async () => {
     imageAlign.value = 'left'
   } catch (error) {
     console.error('圖片上傳失敗:', error)
-    alert('圖片上傳失敗，請稍後再試')
+    showError('圖片上傳失敗，請稍後再試')
   }
+}
+
+const addButton = () => {
+  showButtonModal.value = true
+}
+
+const insertButton = () => {
+  if (!editor.value) return
+  
+  editor.value.chain().focus().setButton({
+    text: buttonText.value || '按鈕',
+    url: buttonType.value === 'link' ? (buttonUrl.value || '#') : '#',
+    color: buttonColor.value,
+    textColor: buttonTextColor.value,
+    backgroundImage: buttonBackgroundImage.value,
+    drawingBackgroundImage: buttonType.value === 'drawing' ? buttonDrawingBackgroundImage.value : null,
+    align: buttonAlign.value,
+  }).run()
+  
+  showButtonModal.value = false
+  buttonText.value = '按鈕'
+  buttonUrl.value = ''
+  buttonType.value = 'link'
+  buttonAlign.value = 'center'
+  buttonColor.value = '#fef08a' // yellow-200
+  buttonTextColor.value = '#854d0e' // yellow-900
+  buttonBackgroundImage.value = null
+  buttonDrawingBackgroundImage.value = null
+}
+
+const openButtonImageSelector = async () => {
+  showButtonImageSelector.value = true
+  await fetchButtonImages()
+}
+
+const fetchButtonImages = async () => {
+  try {
+    const params = {}
+    if (buttonImageSearchQuery.value) {
+      params.search = buttonImageSearchQuery.value
+    }
+    const response = await axios.get('/admin/photos', { params })
+    buttonAvailableImages.value = response.data.data || []
+  } catch (error) {
+    console.error('Failed to fetch images:', error)
+    buttonAvailableImages.value = []
+  }
+}
+
+const selectButtonBackgroundImage = (imageUrl) => {
+  buttonBackgroundImage.value = imageUrl
+  showButtonImageSelector.value = false
+}
+
+const removeButtonBackgroundImage = () => {
+  buttonBackgroundImage.value = null
+}
+
+const openDrawingImageSelector = async () => {
+  showDrawingImageSelector.value = true
+  await fetchDrawingImages()
+}
+
+const fetchDrawingImages = async () => {
+  try {
+    const params = {}
+    if (drawingImageSearchQuery.value) {
+      params.search = drawingImageSearchQuery.value
+    }
+    const response = await axios.get('/admin/photos', { params })
+    drawingAvailableImages.value = response.data.data || []
+  } catch (error) {
+    console.error('Failed to fetch images:', error)
+    drawingAvailableImages.value = []
+  }
+}
+
+const selectDrawingBackgroundImage = (imageUrl) => {
+  buttonDrawingBackgroundImage.value = imageUrl
+  showDrawingImageSelector.value = false
+}
+
+const removeDrawingBackgroundImage = () => {
+  buttonDrawingBackgroundImage.value = null
+}
+
+// 一般圖片插入功能
+const showImageOptionsModal = ref(false)
+const showContentImageSelector = ref(false)
+const contentImageSearchQuery = ref('')
+const contentAvailableImages = ref([])
+
+const openImageOptions = () => {
+  showImageOptionsModal.value = true
+}
+
+const triggerFileUpload = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      selectedImageFile.value = file
+      imageFilename.value = file.name
+      showImageUploadModal.value = true
+      showImageOptionsModal.value = false
+    }
+  }
+  input.click()
+}
+
+const openContentImageSelector = async () => {
+  showContentImageSelector.value = true
+  showImageOptionsModal.value = false
+  await fetchContentImages()
+}
+
+const fetchContentImages = async () => {
+  try {
+    const params = {}
+    if (contentImageSearchQuery.value) {
+      params.search = contentImageSearchQuery.value
+    }
+    const response = await axios.get('/admin/photos', { params })
+    contentAvailableImages.value = response.data.data || []
+  } catch (error) {
+    console.error('Failed to fetch images:', error)
+    contentAvailableImages.value = []
+  }
+}
+
+const selectContentImage = (imageUrl) => {
+  if (editor.value) {
+    editor.value.chain().focus().setImage({ src: imageUrl }).run()
+  }
+  showContentImageSelector.value = false
 }
 
 // 圖片縮放功能
@@ -1010,6 +1321,7 @@ let resizingImg = null
 let startX = 0
 let startWidth = 0
 let startHeight = 0
+let hasResized = false
 
 const handleImageMouseDown = (e) => {
   if (e.target.tagName === 'IMG') {
@@ -1018,6 +1330,7 @@ const handleImageMouseDown = (e) => {
     startX = e.clientX
     startWidth = resizingImg.offsetWidth
     startHeight = resizingImg.offsetHeight
+    hasResized = false
     
     document.addEventListener('mousemove', handleImageMouseMove)
     document.addEventListener('mouseup', handleImageMouseUp)
@@ -1028,41 +1341,79 @@ const handleImageMouseMove = (e) => {
   if (!resizingImg) return
   
   const deltaX = e.clientX - startX
-  const newWidth = Math.max(50, startWidth + deltaX)
-  const aspectRatio = startHeight / startWidth
-  const newHeight = newWidth * aspectRatio
-  
-  resizingImg.style.width = newWidth + 'px'
-  resizingImg.style.height = newHeight + 'px'
+  // 只有當移動距離超過一定閾值時才視為縮放，避免微小抖動
+  if (Math.abs(deltaX) > 5) {
+    hasResized = true
+    const newWidth = Math.max(50, startWidth + deltaX)
+    const aspectRatio = startHeight / startWidth
+    const newHeight = newWidth * aspectRatio
+    
+    resizingImg.style.width = newWidth + 'px'
+    resizingImg.style.height = newHeight + 'px'
+  }
 }
 
 const handleImageMouseUp = () => {
-  if (resizingImg && editor.value) {
+  if (resizingImg && editor.value && hasResized) {
     const newWidth = parseInt(resizingImg.style.width)
     const newHeight = parseInt(resizingImg.style.height)
     const imgSrc = resizingImg.getAttribute('src')
     
-    // 更新圖片節點屬性
-    editor.value.state.doc.descendants((node, pos) => {
-      if (node.type.name === 'image' && node.attrs.src === imgSrc) {
-        const tr = editor.value.state.tr.setNodeMarkup(pos, null, {
-          ...node.attrs,
-          width: newWidth,
-          height: newHeight
-        })
-        editor.value.view.dispatch(tr)
-        return false
-      }
-    })
+    // 只有在有效數值時才更新
+    if (!isNaN(newWidth) && !isNaN(newHeight)) {
+      // 更新圖片節點屬性
+      editor.value.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'image' && node.attrs.src === imgSrc) {
+          const tr = editor.value.state.tr.setNodeMarkup(pos, null, {
+            ...node.attrs,
+            width: newWidth,
+            height: newHeight
+          })
+          editor.value.view.dispatch(tr)
+          return false
+        }
+      })
+    }
   }
   
   resizingImg = null
+  hasResized = false
   document.removeEventListener('mousemove', handleImageMouseMove)
   document.removeEventListener('mouseup', handleImageMouseUp)
 }
 
+const setAlignment = (align) => {
+  if (!editor.value) return
+  
+  const { selection } = editor.value.state
+  
+  // 如果選中的是圖片，更新圖片的 data-align 屬性
+  if (selection.node && selection.node.type.name === 'image') {
+    editor.value.chain().focus().updateAttributes('image', { 'data-align': align }).run()
+  } else {
+    // 否則執行標準的文字對齊
+    editor.value.chain().focus().setTextAlign(align).run()
+  }
+}
+
+// 清除表格選取樣式的函數
+const clearTableSelection = () => {
+  document.querySelectorAll('.table-selected-manual').forEach(el => {
+    el.classList.remove('table-selected-manual')
+  })
+}
+
 onMounted(() => {
   // 移除此處的事件監聽器設定，改用 onCreate 回調
+  // 監聽編輯器的點擊事件，清除表格選取樣式
+  if (editor.value && editor.value.view && editor.value.view.dom) {
+    editor.value.view.dom.addEventListener('mousedown', (e) => {
+      // 如果點擊的不是表格，清除選取樣式
+      if (!e.target.closest('table')) {
+        clearTableSelection()
+      }
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -1235,17 +1586,17 @@ onUnmounted(() => {
       
       <!-- 對齊 -->
       <button
-        @click="editor.chain().focus().setTextAlign('left').run()"
-        :class="{ 'is-active': editor.isActive({ textAlign: 'left' }) }"
+        @click="setAlignment('left')"
+        :class="{ 'is-active': editor.isActive({ textAlign: 'left' }) || (editor.state.selection.node?.type.name === 'image' && editor.state.selection.node.attrs['data-align'] === 'left') }"
         class="group relative p-2 rounded hover:bg-gray-200"
-        title="左對齊"
+        title="靠左對齊"
       >
         <AlignLeft :size="20" />
-        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">左對齊</span>
+        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">靠左對齊</span>
       </button>
       <button
-        @click="editor.chain().focus().setTextAlign('center').run()"
-        :class="{ 'is-active': editor.isActive({ textAlign: 'center' }) }"
+        @click="setAlignment('center')"
+        :class="{ 'is-active': editor.isActive({ textAlign: 'center' }) || (editor.state.selection.node?.type.name === 'image' && editor.state.selection.node.attrs['data-align'] === 'center') }"
         class="group relative p-2 rounded hover:bg-gray-200"
         title="置中對齊"
       >
@@ -1253,16 +1604,16 @@ onUnmounted(() => {
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">置中對齊</span>
       </button>
       <button
-        @click="editor.chain().focus().setTextAlign('right').run()"
-        :class="{ 'is-active': editor.isActive({ textAlign: 'right' }) }"
+        @click="setAlignment('right')"
+        :class="{ 'is-active': editor.isActive({ textAlign: 'right' }) || (editor.state.selection.node?.type.name === 'image' && editor.state.selection.node.attrs['data-align'] === 'right') }"
         class="group relative p-2 rounded hover:bg-gray-200"
-        title="右對齊"
+        title="靠右對齊"
       >
         <AlignRight :size="20" />
-        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">右對齊</span>
+        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">靠右對齊</span>
       </button>
       <button
-        @click="editor.chain().focus().setTextAlign('justify').run()"
+        @click="setAlignment('justify')"
         :class="{ 'is-active': editor.isActive({ textAlign: 'justify' }) }"
         class="group relative p-2 rounded hover:bg-gray-200"
         title="分散對齊"
@@ -1375,7 +1726,7 @@ onUnmounted(() => {
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入塗鴉</span>
       </button>
       <button
-        @click="uploadImage"
+        @click="openImageOptions"
         class="group relative p-2 rounded hover:bg-gray-200"
         title="上傳圖片"
       >
@@ -1452,6 +1803,14 @@ onUnmounted(() => {
       >
         <span class="text-lg">😊</span>
         <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">表情符號</span>
+      </button>
+      <button
+        @click="addButton"
+        class="group relative p-2 rounded hover:bg-gray-200"
+        title="插入按鈕"
+      >
+        <RectangleHorizontal :size="20" />
+        <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">插入按鈕</span>
       </button>
       
       <div class="w-px h-6 bg-gray-300 mx-1"></div>
@@ -1580,7 +1939,7 @@ onUnmounted(() => {
           刪除表格
         </button>
         <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <button @mousedown.prevent="selectTable" class="text-xs px-2 py-1 border rounded hover:bg-gray-100" title="選取表格">
+        <button @click="selectTable" class="text-xs px-2 py-1 border rounded hover:bg-gray-100 bg-yellow-50" title="選取表格後可使用對齊功能">
           選取表格
         </button>
       </div>
@@ -1721,6 +2080,320 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Button Modal -->
+    <div v-if="showButtonModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 class="text-lg font-bold mb-4">插入按鈕</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">按鈕文字</label>
+            <input
+              v-model="buttonText"
+              type="text"
+              placeholder="按鈕"
+              class="w-full px-3 py-2 border rounded"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">功能類型</label>
+            <div class="flex gap-2">
+              <label class="flex items-center">
+                <input type="radio" value="link" v-model="buttonType" class="mr-2" />
+                <span class="text-sm">連結</span>
+              </label>
+              <label class="flex items-center">
+                <input type="radio" value="drawing" v-model="buttonType" class="mr-2" />
+                <span class="text-sm">開啟塗鴉</span>
+              </label>
+            </div>
+          </div>
+          <div v-if="buttonType === 'link'">
+            <label class="block text-sm font-medium mb-1">連結網址</label>
+            <input
+              v-model="buttonUrl"
+              type="url"
+              placeholder="https://example.com"
+              class="w-full px-3 py-2 border rounded"
+            />
+          </div>
+          <div v-if="buttonType === 'drawing'">
+            <label class="block text-sm font-medium mb-1">塗鴉背景圖片</label>
+            <div class="flex gap-2">
+              <button
+                @click="openDrawingImageSelector"
+                type="button"
+                class="flex-1 px-3 py-2 border rounded hover:bg-gray-50 text-sm"
+              >
+                {{ buttonDrawingBackgroundImage ? '更換背景圖片' : '選擇背景圖片' }}
+              </button>
+              <button
+                v-if="buttonDrawingBackgroundImage"
+                @click="removeDrawingBackgroundImage"
+                type="button"
+                class="px-3 py-2 border rounded hover:bg-red-50 text-red-600 text-sm"
+              >
+                移除
+              </button>
+            </div>
+            <div v-if="buttonDrawingBackgroundImage" class="mt-2">
+              <img :src="buttonDrawingBackgroundImage" class="w-full h-20 object-cover rounded border" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">背景</label>
+            <div class="flex gap-2">
+              <button
+                @click="openButtonImageSelector"
+                type="button"
+                class="flex-1 px-3 py-2 border rounded hover:bg-gray-50 text-sm"
+              >
+                {{ buttonBackgroundImage ? '更換背景圖片' : '選擇背景圖片' }}
+              </button>
+              <button
+                v-if="buttonBackgroundImage"
+                @click="removeButtonBackgroundImage"
+                type="button"
+                class="px-3 py-2 border rounded hover:bg-red-50 text-red-600 text-sm"
+              >
+                移除圖片
+              </button>
+            </div>
+            <div v-if="buttonBackgroundImage" class="mt-2">
+              <img :src="buttonBackgroundImage" class="w-full h-20 object-cover rounded border" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">對齊方式</label>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                @click="buttonAlign = 'left'"
+                :class="[
+                  'flex-1 px-3 py-2 border rounded text-sm',
+                  buttonAlign === 'left' ? 'bg-blue-500 text-white' : 'hover:bg-gray-50'
+                ]"
+              >
+                靠左
+              </button>
+              <button
+                type="button"
+                @click="buttonAlign = 'center'"
+                :class="[
+                  'flex-1 px-3 py-2 border rounded text-sm',
+                  buttonAlign === 'center' ? 'bg-blue-500 text-white' : 'hover:bg-gray-50'
+                ]"
+              >
+                置中
+              </button>
+              <button
+                type="button"
+                @click="buttonAlign = 'right'"
+                :class="[
+                  'flex-1 px-3 py-2 border rounded text-sm',
+                  buttonAlign === 'right' ? 'bg-blue-500 text-white' : 'hover:bg-gray-50'
+                ]"
+              >
+                靠右
+              </button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">背景顏色</label>
+              <input
+                v-model="buttonColor"
+                type="color"
+                class="w-full h-10 border rounded cursor-pointer"
+                :disabled="!!buttonBackgroundImage"
+              />
+              <p v-if="buttonBackgroundImage" class="text-xs text-gray-500 mt-1">使用圖片時無效</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">文字顏色</label>
+              <input
+                v-model="buttonTextColor"
+                type="color"
+                class="w-full h-10 border rounded cursor-pointer"
+              />
+            </div>
+          </div>
+          <div class="p-3 bg-gray-50 rounded text-center">
+            <a
+              :style="{
+                display: 'inline-block',
+                padding: '0.75rem 1.5rem',
+                backgroundColor: buttonBackgroundImage ? 'transparent' : buttonColor,
+                backgroundImage: buttonBackgroundImage ? `url('${buttonBackgroundImage}')` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                color: buttonTextColor,
+                textDecoration: 'none',
+                borderRadius: '0.375rem',
+                fontWeight: '500',
+              }"
+            >
+              {{ buttonText || '按鈕' }}
+            </a>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button @click="showButtonModal = false; buttonText = '按鈕'; buttonUrl = ''; buttonColor = '#fef08a'; buttonTextColor = '#854d0e'; buttonBackgroundImage = null" class="px-4 py-2 text-gray-600 hover:text-gray-800 border rounded">
+            取消
+          </button>
+          <button @click="insertButton" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            插入
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Image Options Modal -->
+    <div v-if="showImageOptionsModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="showImageOptionsModal = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-[400px] flex flex-col gap-4">
+        <h3 class="text-lg font-bold mb-2">插入圖片</h3>
+        <button 
+          @click="triggerFileUpload"
+          class="flex items-center justify-center gap-2 p-4 border rounded hover:bg-gray-50 transition-colors"
+        >
+          <Upload :size="24" />
+          <span>上傳檔案</span>
+        </button>
+        <button 
+          @click="openContentImageSelector"
+          class="flex items-center justify-center gap-2 p-4 border rounded hover:bg-gray-50 transition-colors"
+        >
+          <ImageIcon :size="24" />
+          <span>選擇圖片</span>
+        </button>
+        <button 
+          @click="showImageOptionsModal = false"
+          class="mt-2 px-4 py-2 text-gray-600 hover:text-gray-800 border rounded self-end"
+        >
+          取消
+        </button>
+      </div>
+    </div>
+
+    <!-- Content Image Selector Modal -->
+    <div v-if="showContentImageSelector" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="showContentImageSelector = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[80vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-bold">選擇圖片</h3>
+          <button @click="showContentImageSelector = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div class="mb-4">
+          <input
+            v-model="contentImageSearchQuery"
+            @input="fetchContentImages"
+            type="text"
+            placeholder="搜尋圖片..."
+            class="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="contentAvailableImages.length === 0" class="text-center text-gray-500 py-8">
+            沒有找到圖片
+          </div>
+          <div v-else class="grid grid-cols-4 gap-4">
+            <div
+              v-for="image in contentAvailableImages"
+              :key="image.id"
+              @click="selectContentImage(image.url)"
+              class="cursor-pointer border rounded overflow-hidden hover:border-blue-500 hover:shadow-lg transition-all aspect-square"
+            >
+              <img :src="image.url" :alt="image.filename" class="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drawing Background Image Selector Modal -->
+    <div v-if="showDrawingImageSelector" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="showDrawingImageSelector = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[80vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-bold">選擇塗鴉背景圖片</h3>
+          <button @click="showDrawingImageSelector = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div class="mb-4">
+          <input
+            v-model="drawingImageSearchQuery"
+            @input="fetchDrawingImages"
+            type="text"
+            placeholder="搜尋圖片..."
+            class="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="drawingAvailableImages.length === 0" class="text-center text-gray-500 py-8">
+            沒有找到圖片
+          </div>
+          <div v-else class="grid grid-cols-4 gap-4">
+            <div
+              v-for="image in drawingAvailableImages"
+              :key="image.id"
+              @click="selectDrawingBackgroundImage(image.url)"
+              class="cursor-pointer border rounded overflow-hidden hover:border-blue-500 hover:shadow-lg transition-all aspect-square"
+            >
+              <img :src="image.url" :alt="image.filename" class="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Button Image Selector Modal -->
+    <div v-if="showButtonImageSelector" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="showButtonImageSelector = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[80vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-bold">選擇背景圖片</h3>
+          <button @click="showButtonImageSelector = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div class="mb-4">
+          <input
+            v-model="buttonImageSearchQuery"
+            @input="fetchButtonImages"
+            type="text"
+            placeholder="搜尋圖片..."
+            class="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="buttonAvailableImages.length === 0" class="text-center text-gray-500 py-8">
+            沒有找到圖片
+          </div>
+          <div v-else class="grid grid-cols-4 gap-4">
+            <div
+              v-for="image in buttonAvailableImages"
+              :key="image.id"
+              @click="selectButtonBackgroundImage(image.url)"
+              class="cursor-pointer border rounded overflow-hidden hover:border-blue-500 hover:shadow-lg transition-all aspect-square"
+            >
+              <img :src="image.url" :alt="image.filename" class="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- HTML Editor Modal -->
     <div v-if="showHtmlModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="bg-white rounded-lg shadow-xl p-6 w-[800px] max-h-[90vh] flex flex-col">
@@ -1844,6 +2517,29 @@ ruby rt {
   outline-offset: 2px;
 }
 
+/* Images in Table Cells */
+.ProseMirror table td img,
+.ProseMirror table th img {
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  display: block;
+  object-fit: contain;
+  cursor: default;
+}
+
+.ProseMirror table td img:hover,
+.ProseMirror table th img:hover {
+  outline: none;
+}
+
+.ProseMirror table td img.ProseMirror-selectednode,
+.ProseMirror table th img.ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
 /* Blockquote Styling */
 .ProseMirror blockquote {
   border-left: 4px solid #d1d5db;
@@ -1891,6 +2587,27 @@ ruby rt {
   background-color: #3b82f6;
   cursor: col-resize;
   z-index: 20;
+}
+
+/* Table Row Resize */
+.ProseMirror table tr {
+  position: relative;
+}
+
+.ProseMirror table tr:hover::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 4px;
+  background-color: transparent;
+  cursor: row-resize;
+  z-index: 10;
+}
+
+.ProseMirror table tr:hover::after:hover {
+  background-color: rgba(59, 130, 246, 0.3);
 }
 
 .ProseMirror .selectedCell:after {
@@ -1944,12 +2661,11 @@ ruby rt {
 /* Table Border Width */
 .ProseMirror table {
   border-collapse: collapse;
-  border: 1px solid #d1d5db !important;
 }
 
 .ProseMirror table td,
 .ProseMirror table th {
-  border: 1px solid #d1d5db !important;
+  padding: 0.5rem;
 }
 
 .ProseMirror table[data-border="0"],
@@ -2036,10 +2752,27 @@ ruby rt {
 }
 
 .ProseMirror table.ProseMirror-selectednode {
-  outline: 3px solid #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
-  position: relative;
-  z-index: 10;
+  outline: 4px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.3) !important;
+  background-color: rgba(59, 130, 246, 0.05) !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+/* 確保選取的表格有明顯的視覺效果 */
+.ProseMirror .ProseMirror-selectednode.table,
+.ProseMirror table[data-pm-slice] {
+  outline: 4px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+}
+
+/* 手動選取樣式（備用方案） */
+.ProseMirror table.table-selected-manual {
+  outline: 4px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.3) !important;
+  background-color: rgba(59, 130, 246, 0.05) !important;
 }
 
 /* Table input styling */
@@ -2050,6 +2783,25 @@ ruby rt {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   display: inline-block;
+}
+
+/* Button Node Styling */
+.ProseMirror div[data-type="button"] {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.ProseMirror div[data-type="button"] a {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  text-decoration: none;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.ProseMirror div[data-type="button"] a:hover {
+  opacity: 0.9;
 }
 </style>
 

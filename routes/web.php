@@ -24,6 +24,13 @@ Route::get('/editor', function () {
     return Inertia::render('EditorDemo');
 })->middleware(['auth', 'verified'])->name('editor');
 
+Route::get('/drawing-editor', function () {
+    return Inertia::render('DrawingEditor', [
+        'backgroundImage' => request('backgroundImage'),
+        'returnUrl' => request('returnUrl'),
+    ]);
+})->middleware(['auth', 'verified'])->name('drawing-editor');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -41,6 +48,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('/handbooks/{id}', [HandbookController::class, 'destroy'])->name('handbooks.destroy');
         Route::get('/photos', [PhotoController::class, 'index'])->name('photos');
         Route::post('/photos/upload', [PhotoController::class, 'upload'])->name('photos.upload');
+        Route::put('/photos/{id}', [PhotoController::class, 'update'])->name('photos.update');
+        Route::delete('/photos/{id}', [PhotoController::class, 'destroy'])->name('photos.destroy');
     });
 });
 

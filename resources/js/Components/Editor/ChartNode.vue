@@ -3,6 +3,7 @@ import { NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3'
 import { ref, computed, watch } from 'vue'
 import { Bar, Line, Pie, Doughnut } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, LineElement, PointElement, ArcElement } from 'chart.js'
+import { showError } from '@/utils/sweetalert'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, LineElement, PointElement, ArcElement)
 
@@ -43,7 +44,7 @@ const save = () => {
     props.updateAttributes({ chartData: data, chartType: chartType.value })
     isEditing.value = false
   } catch (e) {
-    alert('Invalid JSON')
+    showError('JSON 格式錯誤')
   }
 }
 </script>
