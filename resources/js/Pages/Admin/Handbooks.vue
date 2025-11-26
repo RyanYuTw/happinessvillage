@@ -74,6 +74,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { reactive } from 'vue'
+import { showConfirm } from '@/utils/sweetalert'
 
 const props = defineProps({
     handbooks: {
@@ -118,8 +119,9 @@ const formatDate = (timestamp) => {
     })
 }
 
-const deleteHandbook = (id) => {
-    if (confirm('確定要刪除這個手冊嗎？')) {
+const deleteHandbook = async (id) => {
+    const result = await showConfirm('確定要刪除這個手冊嗎？')
+    if (result.isConfirmed) {
         router.delete(route('admin.handbooks.destroy', id))
     }
 }
