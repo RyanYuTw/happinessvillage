@@ -1,59 +1,111 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Happiness Village 幸福村
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+幸福村教學手冊管理系統 — 基於 Laravel + Inertia.js + Vue 3 打造的注音教學手冊編輯與管理平台。
 
-## About Laravel
+## 功能特色
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- 📖 教學手冊 CRUD 管理
+- ✏️ 富文字編輯器（含表格、繪圖、按鈕等自訂元件）
+- 🎨 線上繪圖編輯器
+- 📷 照片管理
+- 🔤 注音符號工具
+- 👤 使用者驗證與權限管理
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 技術棧
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **後端**: Laravel 11, PHP 8.2+
+- **前端**: Vue 3, Inertia.js, Vite
+- **樣式**: Tailwind CSS
+- **資料庫**: MySQL / SQLite
 
-## Learning Laravel
+## 環境需求
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+- PHP >= 8.2
+- Composer
+- Node.js >= 18
+- MySQL 8.0+（或 SQLite）
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 安裝步驟
 
-## Laravel Sponsors
+### 1. Clone 專案
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+git clone git@github.com:RyanYuTw/happinessvillage.git
+cd happinessvillage
+```
 
-### Premium Partners
+### 2. 安裝依賴
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+composer install
+npm install
+```
 
-## Contributing
+### 3. 環境設定
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+cp .env.example .env
+php artisan key:generate
+```
 
-## Code of Conduct
+編輯 `.env` 填入資料庫等設定（參見下方環境變數說明）。
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### 4. 資料庫遷移
 
-## Security Vulnerabilities
+```bash
+php artisan migrate
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 5. 啟動開發伺服器
+
+```bash
+# 終端 1 — 後端
+php artisan serve
+
+# 終端 2 — 前端（Vite）
+npm run dev
+```
+
+## 環境變數說明
+
+複製 `.env.example` 為 `.env`，主要需設定：
+
+| 變數 | 說明 | 範例 |
+|------|------|------|
+| `APP_NAME` | 應用名稱 | `HappinessVillage` |
+| `APP_URL` | 應用 URL | `http://localhost` |
+| `DB_CONNECTION` | 資料庫類型 | `mysql` / `sqlite` |
+| `DB_HOST` | 資料庫主機 | `127.0.0.1` |
+| `DB_DATABASE` | 資料庫名稱 | `happinessvillage` |
+| `DB_USERNAME` | 資料庫帳號 | `root` |
+| `DB_PASSWORD` | 資料庫密碼 | *(你的密碼)* |
+| `SEED_USER_EMAIL` | 初始用戶信箱 | *(選填，供 seed 腳本用)* |
+| `SEED_USER_NAME` | 初始用戶名稱 | *(選填)* |
+| `SEED_USER_PASSWORD` | 初始用戶密碼 | *(選填)* |
+
+> ⚠️ **注意**：`.env` 檔案包含敏感資訊，**絕對不要**提交至版本控制。
+
+## 專案結構
+
+```
+├── app/
+│   └── Http/Controllers/
+│       ├── HandbookController.php   # 教學手冊
+│       ├── PhotoController.php      # 照片管理
+│       └── ZhuyinController.php     # 注音工具
+├── resources/js/
+│   ├── Components/
+│   │   └── Editor/                  # 富文字編輯器元件
+│   └── Pages/
+│       ├── Admin/                   # 後台管理頁面
+│       ├── DrawingEditor.vue        # 繪圖編輯器
+│       └── Welcome.vue              # 首頁
+├── routes/
+│   └── web.php                      # 路由定義
+└── database/
+    └── migrations/                  # 資料庫遷移
+```
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+本專案僅供內部使用。
